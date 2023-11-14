@@ -1,0 +1,11 @@
+name: psp_dust
+channels:
+  - defaults
+dependencies:
+  - scipy=1.11
+  - matplotlib
+  - pandas=2.1
+  - spyder=5.5
+  - numpy=1.26
+  - cdflib=1.2
+prefix: C:\Users\skoci\anaconda3\envs\psp_dust
