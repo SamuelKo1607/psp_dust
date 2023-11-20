@@ -2,6 +2,7 @@ import os
 import glob
 import cdflib
 import pickle
+import datetime as dt
 
 from fetch_data import psp_dust_load
 from conversions import tt2000_to_date
@@ -12,49 +13,25 @@ from paths import l3_dust_location
 
 class Observation:
     """
-    Aggreaget results of the measurement day, plus SolO and RPW status.
+    Aggregate results of the measurement period.
     """
     def __init__(self,
                  date,
-                 impact_times,
-                 non_impact_times,
-                 duty_hours,
-                 sampling_rate,
-                 heliocentric_distance,
-                 spacecraft_speed,
-                 heliocentric_radial_speed,
-                 velocity_phase,
-                 velocity_inclination):
+                 epoch_center,
+                 epochs_on_day,
+                 encounter,
+                 rate_corrected,
+                 inbound,
+                 ej2000):
         self.date = date
         self.YYYYMMDD = date.strftime('%Y%m%d')
-        self.impact_count = len(impact_times)
-        self.impact_times = impact_times
-        self.non_impact_times = non_impact_times
-        self.duty_hours = duty_hours
-        self.sampling_rate = sampling_rate
-        self.heliocentric_distance = heliocentric_distance
-        self.spacecraft_speed = spacecraft_speed
-        self.heliocentric_radial_speed = heliocentric_radial_speed
-        self.heliocentric_tangential_speed = ( spacecraft_speed**2
-                                               - heliocentric_radial_speed**2
-                                             )**0.5
-        self.velocity_phase = velocity_phase
-        self.velocity_inclination = velocity_inclination
-        self.velocity_HAE_x = ( spacecraft_speed
-                                * np.sin(np.deg2rad(90-velocity_inclination))
-                                * np.cos(np.deg2rad(velocity_phase)) )
-        self.velocity_HAE_y = ( spacecraft_speed
-                                * np.sin(np.deg2rad(90-velocity_inclination))
-                                * np.sin(np.deg2rad(velocity_phase)) )
-        self.velocity_HAE_z = ( spacecraft_speed
-                                * np.cos(np.deg2rad(90-velocity_inclination)) )
+        self.epoch_center = epoch_center
+        self.epochs_on_day = epochs_on_day
+        self.encounter = encounter
+        self.rate_corrected = rate_corrected
+        self.inbound = inbound
+        self.ej2000 = ej2000
         self.produced = dt.datetime.now()
-
-
-    def info(self):
-        print(self.YYYYMMDD+
-              " \n impact count: "+ str(self.impact_count)+
-              " \n duty hours: " + str(self.duty_hours))
 
 
 def save_list(data,
@@ -138,22 +115,72 @@ def list_cdf(location=l3_dust_location):
 
 
 def build_obs_from_cdf(cdf_file):
+    """
+    A function to build a list of observations extracted from one cdf file.
 
+    Parameters
+    ----------
+    cdf_file : cdflib.cdfread.CDF
+        The PSP L3 dust cdf file to extract data from. 
+
+    Returns
+    -------
+    observations : list of Observation object
+        One entry for each observation, typically once per 8 hours.
+
+    """
 
     epochs = cdf_file.varget("psp_fld_l3_dust_V2_rate_epoch")
     YYYYMMDD = [str(cdf_file.cdf_info().CDF)[-16:-8]]*len(epochs)
     dates = tt2000_to_date(epochs)
     encounter = cdf_file.varget("psp_fld_l3_dust_V2_rate_encounter")
-    rate_corrcted = cdf_file.varget("psp_fld_l3_dust_V2_rate_ucc")
+    rate_corrected = cdf_file.varget("psp_fld_l3_dust_V2_rate_ucc")
+    inbound = cdf_file.varget("psp_fld_l3_dust_V2_rate_inoutbound")
+    ej2000_x = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_x")
+    ej2000_y = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_y")
+    ej2000_z = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_z")
 
-    observation = Observation()
+    observations = []
+    for i,epoch in enumerate(epochs):
+        observations.append(Observation(dates[i],
+                                        epoch,
+                                        len(epochs),
+                                        encounter[i],
+                                        rate_corrected[i],
+                                        inbound[i],
+                                        [ej2000_x[i],
+                                         ej2000_y[i],
+                                         ej2000_z[i]]
+                                        ))
 
-    return observation
+    return observations
 
 
-def main():
+def main(dust_location=l3_dust_location,
+         target_directory=os.path.join("998_generated","observations",""),
+         save=True):
+    """
+    A function to aggregate all the observations as per PSP L3 dust. A folder
+    is browsed nad a list of Observation type is created and optionally saved.
 
-    for file in list_cdf(l3_dust_location):
+    Parameters
+    ----------
+    dust_location : str, optional
+        The path to the data. The default is l3_dust_location.
+    target_directory : str, optional
+        The path where to put the final list. 
+        The default is os.path.join("998_generated","observations","").
+    save : bool, optional
+        Whether to save the data. The default is True.
+
+    Returns
+    -------
+    observation : list of Observation
+        The agregated data.
+
+    """
+    observations = []
+    for file in list_cdf(dust_location):
         cdf_file = cdflib.CDF(file)
         short_name = str(cdf_file.cdf_info().CDF)[
                              str(cdf_file.cdf_info().CDF).find("psp_fld_l3_")
@@ -163,10 +190,16 @@ def main():
         except Exception as err:
             print(f"{short_name}{err}")
         else:
-            save_list(observation,
-                      short_name+"_obs.pkl",
-                      os.path.join("998_generated","observations",""))
-    return
+            observations.extend(observation)
+
+
+
+    if save:
+        save_list(observations,
+                  "all_obs.pkl",
+                  target_directory)
+
+    return observations
 
 
 #%%
