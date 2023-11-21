@@ -3,12 +3,13 @@ import glob
 import cdflib
 import pickle
 import datetime as dt
+import numpy as np
 
 from fetch_data import psp_dust_load
 from conversions import tt2000_to_date
 
 from paths import l3_dust_location
-
+from paths import all_obs_location
 
 
 class Observation:
@@ -28,10 +29,54 @@ class Observation:
         self.epoch_center = epoch_center
         self.epochs_on_day = epochs_on_day
         self.encounter = encounter
+        self.encounter_group = encounter_group(encounter)
         self.rate_corrected = rate_corrected
         self.inbound = inbound
         self.ej2000 = ej2000
         self.produced = dt.datetime.now()
+
+
+def encounter_group(enc):
+    """
+    A lookup table to translate from encounter number to encounter group.
+
+    Parameters
+    ----------
+    enc : int
+        Encounter number strating at 1.
+
+    Returns
+    -------
+    group : int
+        Encounter group .
+
+    Raises
+    ------
+    Exception : "enc: {enc} is {type(enc)} ; should be int>=0"
+        In case the input is not int>0
+
+    """
+
+    if type(enc) not in [int,np.int32] or not enc>=0:
+        raise Exception(f"enc: {enc} is {type(enc)} ; should be int>=0")
+    elif enc == 0:
+        group = 0
+    elif enc < 4:
+        group = 1
+    elif enc < 6:
+        group = 2
+    elif enc < 8:
+        group = 3
+    elif enc < 10:
+        group = 4
+    elif enc < 17:
+        group = 5
+    elif enc < 22:
+        group = 6
+    else:
+        group = 7
+
+    return group
 
 
 def save_list(data,
@@ -157,7 +202,7 @@ def build_obs_from_cdf(cdf_file):
 
 
 def main(dust_location=l3_dust_location,
-         target_directory=os.path.join("998_generated","observations",""),
+         target_directory=all_obs_location,
          save=True):
     """
     A function to aggregate all the observations as per PSP L3 dust. A folder
@@ -188,7 +233,7 @@ def main(dust_location=l3_dust_location,
         try:
             observation = build_obs_from_cdf(cdf_file)
         except Exception as err:
-            print(f"{short_name}{err}")
+            print(f"{short_name}: {err}")
         else:
             observations.extend(observation)
 
