@@ -7,9 +7,15 @@ import numpy as np
 
 from fetch_data import psp_dust_load
 from conversions import tt2000_to_date
+from conversions import tt2000_to_jd
+from ephemeris import get_state
 
 from paths import l3_dust_location
 from paths import all_obs_location
+from paths import psp_ephemeris_file
+from ephemeris import r_sun
+from ephemeris import au
+
 
 
 class Observation:
@@ -21,18 +27,50 @@ class Observation:
                  epoch_center,
                  epochs_on_day,
                  encounter,
-                 rate_corrected,
+                 rate_corrected, #[s^-1]
+                 count_observed, #[1]
                  inbound,
-                 ej2000):
+                 ej2000,
+                 heliocentric_distance,
+                 spacecraft_speed,
+                 heliocentric_radial_speed,
+                 velocity_phase,
+                 velocity_inclination):
         self.date = date
         self.YYYYMMDD = date.strftime('%Y%m%d')
         self.epoch_center = epoch_center
+        self.jd_center = tt2000_to_jd(epoch_center)
         self.epochs_on_day = epochs_on_day
         self.encounter = encounter
         self.encounter_group = encounter_group(encounter)
-        self.rate_corrected = rate_corrected
+        self.rate_corrected = rate_corrected                #[s^-1]
+        self.count_oserved = count_observed                 #[1]
+        if count_observed == 0:
+            # if no dust was observed in the period of interest,
+            # it is assumed that the period was unperturebed,
+            # therefore 8 hours
+            self.t_obs_eff = 28800                              #[s]
+        else:
+            self.t_obs_eff = count_observed / rate_corrected    #[s]
+        self.duty_hours = self.t_obs_eff / 3600
         self.inbound = inbound
         self.ej2000 = ej2000
+        self.heliocentric_distance = heliocentric_distance  #[AU]
+        self.spacecraft_speed = spacecraft_speed            #[km/s]
+        self.heliocentric_radial_speed = heliocentric_radial_speed #[km/s]
+        self.heliocentric_tangential_speed = ( spacecraft_speed**2
+                                               - heliocentric_radial_speed**2
+                                             )**0.5         #[km/s]
+        self.velocity_phase = velocity_phase                #[deg]
+        self.velocity_inclination = velocity_inclination    #[deg]
+        self.velocity_HAE_x = ( spacecraft_speed
+                                * np.sin(np.deg2rad(90-velocity_inclination))
+                                * np.cos(np.deg2rad(velocity_phase)) )
+        self.velocity_HAE_y = ( spacecraft_speed
+                                * np.sin(np.deg2rad(90-velocity_inclination))
+                                * np.sin(np.deg2rad(velocity_phase)) )
+        self.velocity_HAE_z = ( spacecraft_speed
+                                * np.cos(np.deg2rad(90-velocity_inclination)) )
         self.produced = dt.datetime.now()
 
 
@@ -140,6 +178,27 @@ def load_list(name,
         return data
 
 
+def load_all_obs(location=all_obs_location):
+    """
+    A tiny wrapper to get all the observations.
+
+    Parameters
+    ----------
+    location : str, optional
+        the location of the all_obs file. 
+        The default is all_obs_location from paths.
+
+    Returns
+    -------
+    all_obs : list of Observation
+        All the observations.
+
+    """
+    all_obs = load_list("all_obs.pkl",
+                        location = location)
+    return all_obs
+
+
 def list_cdf(location=l3_dust_location):
     """
     The function to list all the l3 dust datafiles.
@@ -175,7 +234,9 @@ def build_obs_from_cdf(cdf_file):
 
     """
 
+    # Some initial loads.
     epochs = cdf_file.varget("psp_fld_l3_dust_V2_rate_epoch")
+    event_epochs = cdf_file.varget("psp_fld_l3_dust_V2_event_epoch")
     YYYYMMDD = [str(cdf_file.cdf_info().CDF)[-16:-8]]*len(epochs)
     dates = tt2000_to_date(epochs)
     encounter = cdf_file.varget("psp_fld_l3_dust_V2_rate_encounter")
@@ -185,17 +246,40 @@ def build_obs_from_cdf(cdf_file):
     ej2000_y = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_y")
     ej2000_z = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_z")
 
+    # Check the fromat.
+    if len(epochs) != 3:
+        raise Exception(f"unexpected structure: {len(epochs)} != 3")
+
+    # Make the Observations.
+    rate_seg_starts = epochs - (epochs[1]-epochs[0])//2
+    rate_seg_ends    = epochs + (epochs[1]-epochs[0])//2
     observations = []
     for i,epoch in enumerate(epochs):
-        observations.append(Observation(dates[i],
-                                        epoch,
-                                        len(epochs),
-                                        encounter[i],
-                                        rate_corrected[i],
-                                        inbound[i],
-                                        [ej2000_x[i],
-                                         ej2000_y[i],
-                                         ej2000_z[i]]
+
+        # Get the epehemeris.
+        r, v, v_rad, v_phi, v_theta = get_state(epoch, psp_ephemeris_file)
+
+        # Get the counts.
+        count_observed = len(event_epochs[
+                                    (event_epochs > rate_seg_starts[i])
+                                    *(event_epochs < rate_seg_ends[i]) ])
+
+        # Make the Observation.
+        observations.append(Observation(date = dates[i],
+                                        epoch_center = epoch,
+                                        epochs_on_day = len(epochs),
+                                        encounter = encounter[i],
+                                        rate_corrected = rate_corrected[i],
+                                        count_observed = count_observed,
+                                        inbound = inbound[i],
+                                        ej2000 = [ej2000_x[i],
+                                                  ej2000_y[i],
+                                                  ej2000_z[i]],
+                                        heliocentric_distance = r,
+                                        spacecraft_speed = v,
+                                        heliocentric_radial_speed = v_rad,
+                                        velocity_phase = v_phi,
+                                        velocity_inclination = v_theta
                                         ))
 
     return observations
