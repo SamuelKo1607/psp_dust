@@ -36,16 +36,16 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_bg <- function(l_bg=feed_x){
-    return(dgamma(l_bg,  shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_bg,  shape = 2,    scale = 1e-8, log=TRUE))
   }
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a, shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_a, shape = 2,    scale = 1e-5, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){
-    return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_b,   shape = 2,    scale = 1e-5, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 60,    sd   = 0.5,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 60,    sd   = 0.0005,    log=TRUE))
   }
   prior.e_v <- function(e_v=feed_x){
     return(dnorm(e_v,    mean  = 2.2,   sd   = 0.05, log=TRUE))
@@ -205,6 +205,7 @@ names(mydata_solo)[c(2,3,4,5,6,9,10,11)] = c("flux",
                                              "vy",
                                              "vz")
 mydata_solo$area = 8
+mydata_solo$sc_id = 1
 
 mydata_psp = read.csv(file = myfile_psp)
 names(mydata_psp)[c(2,3,4,5,6,9,10,11)] = c("flux",
@@ -216,6 +217,7 @@ names(mydata_psp)[c(2,3,4,5,6,9,10,11)] = c("flux",
                                             "vy",
                                             "vz")
 mydata_psp$area = 6
+mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
 
@@ -237,7 +239,7 @@ rgen = inla.rgeneric.define(model = three_component_model,
                             vy = mydata$vy,
                             vz = mydata$vz,
                             area = mydata$area)
-result = inla(flux ~ -1 + f(idx, model = rgen),
+result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
               data = mydata, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
               safe = TRUE, verbose = TRUE)
