@@ -23,11 +23,11 @@ library(distr)
 three_component_model <- function(cmd = c("graph", "Q", "mu", "initial", 
                                           "log.norm.const", "log.prior", "quit",
                                           "rate", 
-                                          "prior.l_bg",
                                           "prior.l_a",
                                           "prior.l_b",
                                           "prior.v_b_r",
-                                          "prior.e_v",
+                                          "prior.e_a_v",
+                                          "prior.e_b_v",
                                           "prior.e_a_r",
                                           "prior.e_b_r"), 
                                   theta=NULL, feed_x=NULL){
@@ -35,9 +35,6 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   envir <- parent.env(environment())
   prec.high = exp(15)
   
-  prior.l_bg <- function(l_bg=feed_x){
-    return(dgamma(l_bg,  shape = 2,    scale = 1e-8, log=TRUE))
-  }
   prior.l_a <- function(l_a=feed_x){
     return(dgamma(l_a, shape = 2,    scale = 1e-5, log=TRUE))
   }
@@ -45,13 +42,16 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(dgamma(l_b,   shape = 2,    scale = 1e-5, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 60,    sd   = 0.0005,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 60,    sd   = 0.5,    log=TRUE))
   }
-  prior.e_v <- function(e_v=feed_x){
-    return(dnorm(e_v,    mean  = 2.2,   sd   = 0.05, log=TRUE))
+  prior.e_a_v <- function(e_a_v=feed_x){
+    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.05, log=TRUE))
+  }
+  prior.e_b_v <- function(e_b_v=feed_x){
+    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.005, log=TRUE))
   }
   prior.e_a_r <- function(e_a_r=feed_x){
-    return(dnorm(e_a_r,    mean  = -1.65, sd   = 0.5, log=TRUE))
+    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.005, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
     return(dnorm(e_b_r,    mean  = -1.65, sd   = 0.005, log=TRUE))
@@ -60,7 +60,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   rate <- function(#covariates
                    v_sc_r, v_sc_t, r_sc, v_sc_x, v_sc_y, v_sc_z, area,  
                    #hyperparam
-                   l_bg, l_a, l_b, v_b_r, e_v, e_a_r, e_b_r,      
+                   l_a, l_b, v_b_r, e_a_v, e_b_v, e_a_r, e_b_r,      
                    #bound dust parameters
  
                    #beta met. parameters
@@ -72,10 +72,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
       rad = deg/180*pi
       return(rad)
     }
-    
-    #background
-    L_bg = l_bg
-    
+
     #beta meteoroid contribution
     ksi = -2 - e_b_r
     r_factor = r_sc/1
@@ -88,7 +85,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
       + ( v_earth_a - v_b_a )^2
     )^0.5 
     )
-    L_b = l_b * (v_factor)^e_v * (r_factor)^e_b_r 
+    L_b = l_b * (v_factor)^e_b_v * (r_factor)^e_b_r 
     
     #bound dust contribution
     ksi = -2 - e_a_r
@@ -99,21 +96,21 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
       + ( v_sc_t - v_a_a )^2
     )^0.5 
     ) / abs( v_earth_a - v_a_a )
-    L_a = l_a * (v_factor)^e_v * (r_factor)^e_a_r
+    L_a = l_a * (v_factor)^e_a_v * (r_factor)^e_a_r
     
     #normalization to hourly rate, while L_i are in m^-2 s^-1
-    hourly_rate = 3600 * area * ( L_bg + L_b + L_a )
+    hourly_rate = 3600 * area * ( L_b + L_a )
     return(hourly_rate)
   }
   
   
   
   interpret.theta <- function(){
-    return(list(l_bg  = exp(theta[1L]), 
-                l_a   = exp(theta[2L]),
-                l_b   = exp(theta[3L]),
-                v_b_r = theta[4L],
-                e_v   = theta[5L], 
+    return(list(l_a   = exp(theta[1L]),
+                l_b   = exp(theta[2L]),
+                v_b_r = theta[3L],
+                e_a_v = theta[4L], 
+                e_b_v = theta[5L],
                 e_a_r = theta[6L],
                 e_b_r = theta[7L]
                ))
@@ -135,11 +132,11 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(log( rate(#covariates
                      vr, vt, r, vx, vy, vz, area,
                      #hyperparameters
-                     par$l_bg, 
                      par$l_a, 
                      par$l_b, 
                      par$v_b_r, 
-                     par$e_v, 
+                     par$e_a_v, 
+                     par$e_b_v, 
                      par$e_a_r,
                      par$e_b_r
                      )
@@ -155,13 +152,13 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     par = interpret.theta()
     
     #nice priors
-    val <- (prior.l_bg(  par$l_bg)    + theta[1L] +
-            prior.l_a(   par$l_a)     + theta[2L] +
-            prior.l_b(   par$l_b)     + theta[3L] +
-            prior.v_b_r( par$v_b_r)   +
-            prior.e_v(   par$e_v)     + 
-            prior.e_a_r( par$e_a_r)   +
-            prior.e_b_r( par$e_b_r)
+    val <- (prior.l_a(      par$l_a)     + theta[1L] +
+            prior.l_b(      par$l_b)     + theta[2L] +
+            prior.v_b_r(    par$v_b_r)   +
+            prior.e_a_v(    par$e_a_v)   + 
+            prior.e_b_v(    par$e_b_v)   + 
+            prior.e_a_r(    par$e_a_r)   +
+            prior.e_b_r(    par$e_b_r)
            )
   
     return(val)
@@ -170,11 +167,11 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   # Initial values of theta
   initial <- function(){
     #initial values set to the maxima a priori
-    return(c(log(optimize(prior.l_bg, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
-             log(optimize(prior.l_a, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
+    return(c(log(optimize(prior.l_a, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
              log(optimize(prior.l_b, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
-             optimize(prior.v_b_r, interval = c(0, 1000), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_v, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.v_b_r, interval = c(  0, 1000), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_a_v, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_b_v, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
              optimize(prior.e_a_r, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
              optimize(prior.e_b_r, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum
             )
@@ -269,25 +266,25 @@ mtext(paste("residuals histogram, stdev = ",
 # Posterior means of the hyperparameters
 inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
 inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
-inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta3 for idx`)
+result$summary.hyperpar$mean[3]
 result$summary.hyperpar$mean[4]
 result$summary.hyperpar$mean[5]
 result$summary.hyperpar$mean[6]
 result$summary.hyperpar$mean[7]
 
-# Create a layout with one column and six rows
+# Create a layout with one column and seven rows
 par(mfrow = c(7, 1), mar = c(2, 2, 1, 1))
 # Plot each function in a separate row
 plot(exp(result$marginals.hyperpar$`Theta1 for idx`[1:43]),result$marginals.hyperpar$`Theta1 for idx`[44:86])
-text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_bg", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta2 for idx`[1:43]),result$marginals.hyperpar$`Theta2 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_a", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta3 for idx`[1:43]),result$marginals.hyperpar$`Theta3 for idx`[44:86])
+plot(exp(result$marginals.hyperpar$`Theta2 for idx`[1:43]),result$marginals.hyperpar$`Theta2 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_b", col = "red", cex = 1.5)
-plot((result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
+plot((result$marginals.hyperpar$`Theta3 for idx`[1:43]),result$marginals.hyperpar$`Theta3 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "v_b_r", col = "red", cex = 1.5)
+plot((result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
+text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_a_v", col = "red", cex = 1.5)
 plot((result$marginals.hyperpar$`Theta5 for idx`[1:43]),result$marginals.hyperpar$`Theta5 for idx`[44:86])
-text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_v", col = "red", cex = 1.5)
+text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_b_v", col = "red", cex = 1.5)
 plot((result$marginals.hyperpar$`Theta6 for idx`[1:43]),result$marginals.hyperpar$`Theta6 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_a_r", col = "red", cex = 1.5)
 plot((result$marginals.hyperpar$`Theta7 for idx`[1:43]),result$marginals.hyperpar$`Theta7 for idx`[44:86])
