@@ -221,6 +221,8 @@ mydata = rbind(mydata_solo,mydata_psp)
 n = length(mydata$vr)
 mydata$idx = 1:n 
 
+#filterinng to far-from the Sun only
+mydata_far <- subset(mydata, r > 0.2)
 
 
 ###################################
@@ -237,7 +239,7 @@ rgen = inla.rgeneric.define(model = three_component_model,
                             vz = mydata$vz,
                             area = mydata$area)
 result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
-              data = mydata, family = "poisson", E = exposure, 
+              data = mydata_far, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
               safe = TRUE, verbose = TRUE)
 
