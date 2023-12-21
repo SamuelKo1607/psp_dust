@@ -17,7 +17,7 @@ from paths import all_obs_location
 def plot_simple_flux(all_obs):
 
     dates = [o.date for o in all_obs]
-    rates = [o.rate_corrected for o in all_obs]
+    rates = [o.rate_ucc for o in all_obs]
     colors = [f"C{o.encounter_group}" for o in all_obs]
 
     fig,ax = plt.subplots()
