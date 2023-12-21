@@ -27,8 +27,9 @@ class Observation:
                  epoch_center,
                  epochs_on_day,
                  encounter,
-                 rate_corrected, #[s^-1]
-                 count_observed, #[1]
+                 rate_wav, #[s^-1], wave-effects corrected
+                 rate_ucc, #[s^-1], undercounting corrected
+                 count_raw, #[1], raw count
                  inbound,
                  ej2000,
                  heliocentric_distance,
@@ -43,15 +44,17 @@ class Observation:
         self.epochs_on_day = epochs_on_day
         self.encounter = encounter
         self.encounter_group = encounter_group(encounter)
-        self.rate_corrected = rate_corrected                #[s^-1]
-        self.count_oserved = count_observed                 #[1]
-        if count_observed == 0:
+        self.rate_wav = rate_wav
+        self.rate_ucc = rate_ucc
+        self.count_raw = count_raw
+        if count_raw == 0:
             # if no dust was observed in the period of interest,
-            # it is assumed that the period was unperturebed,
-            # therefore 8 hours
-            self.t_obs_eff = 28800                              #[s]
+            # it is assumed that the measurement did not happen
+            self.t_obs_eff = 1e-9                    #[s]
+            self.count_corrected = 0
         else:
-            self.t_obs_eff = count_observed / rate_corrected    #[s]
+            self.count_corrected = np.round(count_raw*(rate_ucc/rate_wav))
+            self.t_obs_eff = count_raw / rate_wav    #[s]
         self.duty_hours = self.t_obs_eff / 3600
         self.inbound = inbound
         self.ej2000 = ej2000
@@ -240,7 +243,8 @@ def build_obs_from_cdf(cdf_file):
     YYYYMMDD = [str(cdf_file.cdf_info().CDF)[-16:-8]]*len(epochs)
     dates = tt2000_to_date(epochs)
     encounter = cdf_file.varget("psp_fld_l3_dust_V2_rate_encounter")
-    rate_corrected = cdf_file.varget("psp_fld_l3_dust_V2_rate_ucc")
+    rate_wav = cdf_file.varget("psp_fld_l3_dust_V2_rate_wav")
+    rate_ucc = cdf_file.varget("psp_fld_l3_dust_V2_rate_ucc")
     inbound = cdf_file.varget("psp_fld_l3_dust_V2_rate_inoutbound")
     ej2000_x = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_x")
     ej2000_y = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_y")
@@ -269,8 +273,9 @@ def build_obs_from_cdf(cdf_file):
                                         epoch_center = epoch,
                                         epochs_on_day = len(epochs),
                                         encounter = encounter[i],
-                                        rate_corrected = rate_corrected[i],
-                                        count_observed = count_observed,
+                                        rate_wav = rate_wav[i],
+                                        rate_ucc = rate_ucc[i],
+                                        count_raw = count_observed,
                                         inbound = inbound[i],
                                         ej2000 = [ej2000_x[i],
                                                   ej2000_y[i],
