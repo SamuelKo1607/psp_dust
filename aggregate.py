@@ -33,7 +33,7 @@ def make_flux_to_fit_inla(observations,
     with open(location+name, 'w', newline='') as f:
         writer = csv.writer(f, delimiter=',')
         writer.writerow(["Julian date",
-                         "Fluxes [/day]",
+                         "Count corrected [/day]",
                          "Radial velocity [km/s]",
                          "Tangential velocity [km/s]",
                          "Radial distance [au]",
@@ -45,7 +45,7 @@ def make_flux_to_fit_inla(observations,
                          "V_Z (HAE) [km/s]"])
         for obs in observations:
             writer.writerow([str(obs.jd_center),
-                             str(obs.count_oserved),
+                             str(obs.count_corrected),
                              str(obs.heliocentric_radial_speed),
                              str(obs.heliocentric_tangential_speed),
                              str(obs.heliocentric_distance),
