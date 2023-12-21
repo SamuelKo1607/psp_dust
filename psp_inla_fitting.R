@@ -36,25 +36,25 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a, shape = 2,    scale = 1e-5, log=TRUE))
+    return(dgamma(l_a, shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){
-    return(dgamma(l_b,   shape = 2,    scale = 1e-5, log=TRUE))
+    return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 60,    sd   = 0.5,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 50,    sd   = 1,    log=TRUE))
   }
   prior.e_a_v <- function(e_a_v=feed_x){
     return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.05, log=TRUE))
   }
   prior.e_b_v <- function(e_b_v=feed_x){
-    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.005, log=TRUE))
+    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.01, log=TRUE))
   }
   prior.e_a_r <- function(e_a_r=feed_x){
-    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.005, log=TRUE))
+    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.001, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
-    return(dnorm(e_b_r,    mean  = -1.65, sd   = 0.005, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.001, log=TRUE))
   }
   
   rate <- function(#covariates
@@ -64,7 +64,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                    #bound dust parameters
  
                    #beta met. parameters
-                   v_b_a=9, 
+                   v_b_a=9,
                    #stationary Earth
                    v_earth_a=0){            
     
@@ -222,7 +222,7 @@ n = length(mydata$vr)
 mydata$idx = 1:n 
 
 #filterinng to far-from the Sun only
-mydata_far <- subset(mydata, r > 0.2)
+mydata_far <- subset(mydata, r > 0.25 & flux > 0)
 
 
 ###################################
@@ -246,22 +246,21 @@ result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
 summary(result)
 
 hist(result$cpo$pit)     # ok 
-result$cpo$failure       # also OK
-pit = result$cpo$pit
+max(result$cpo$failure)       # also OK
+#pit = result$cpo$pit
 #save(pit, file = "998_generated\\inla\\pit.RData")
 
 #plotting
 par(mfrow = c(1, 1))
-plot(mydata$flux/mydata$exposure, ylab="counts/E")
+plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
 lines(result$summary.fitted.values$mean, col=2, lwd=3)
-#lines(30+mydata$flux/mydata$exposure-result$summary.fitted.values$mean, col="blue")
 
-span = round(max(abs(mydata$flux/mydata$exposure-result$summary.fitted.values$mean),40)+0.5)
-hist(mydata$flux/mydata$exposure-result$summary.fitted.values$mean,
+span = round(max(abs(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean),40)+0.5)
+hist(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean,
      breaks=c(-span:span),
      main="")
 mtext(paste("residuals histogram, stdev = ",
-            as.character(sqrt(var(mydata$flux/mydata$exposure-result$summary.fitted.values$mean))),
+            as.character(sqrt(var(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean))),
             ", log(mlik) = ",
             result$mlik[1]), side=3)
   
