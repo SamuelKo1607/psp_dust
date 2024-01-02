@@ -4,47 +4,83 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 
-mpl.rcParams['figure.dpi']= 200
+mpl.rcParams['figure.dpi'] = 200
 
 from paths import psp_model_location
 from paths import figures_location
 
-# Create a new plot
-fig = plt.figure()
-ax = fig.add_subplot(projection='3d')
-ax.set_proj_type('ortho')
-ax.view_init(elev=0, azim=0, roll=0)
+def psp_projection(elev=0,
+                   azim=0,
+                   roll=0,
+                   show=False,
+                   dpi=2000):
+    """
+    A function for getting the projection area of PSP when seen 
+    from an aribtrary angle.
+
+    Parameters
+    ----------
+    elev : float, optional
+        Elevation angle of the view in degrees. The default is 0.
+    azim : float, optional
+        Azimuthal angle of the view in degrees. The default is 0.
+    roll : float, optional
+        Roll angle of the view in degrees. The default is 0.
+    show : bool, optional
+        Whether to show the plot for visual confirmation. 
+        The default is False.
+    dpi : int, optional
+        The resolution of the render. The default is 2000.
+
+    Returns
+    -------
+    projection_area : float
+        The area of PSP as seen from the angle on input.
+
+    """
+
+    # Create a new plot
+    fig = plt.figure(dpi=dpi)
+    ax = fig.add_subplot(projection='3d')
+    ax.set_proj_type('ortho')
+    ax.view_init(elev=elev, azim=azim, roll=roll)
+
+    # Load the STL files and add the vectors to the plot
+    your_mesh = mesh.Mesh.from_file(psp_model_location)
+    ax.add_collection3d(mplot3d.art3d.Poly3DCollection(your_mesh.vectors,
+                                                       facecolors=r"#aaaaaa",
+                                                       edgecolors="none",
+                                                       antialiased=False))
+    # Add a unit sphere.
+    u = np.linspace(0, 2 * np.pi, 1000)
+    v = np.linspace(0, np.pi, 1000)
+    x = 5 + 1/np.sqrt(np.pi) * np.outer(np.cos(u), np.sin(v))
+    y = -4 + 1/np.sqrt(np.pi) * np.outer(np.sin(u), np.sin(v))
+    z = -4 + 1/np.sqrt(np.pi) * np.outer(np.ones(np.size(u)), np.cos(v))
+    ax.plot_surface(x, y, z, color=r"#000000", antialiased=False)
+    
+    # Auto scale to the mesh size
+    scale = your_mesh.points.flatten()
+    ax.auto_scale_xyz(scale, scale, scale)
+    
+    # Show the plot to the screen
+    ax.set_aspect('equal')
+    plt.axis('off')
+    
+    # Now we can save it to a numpy array.
+    fig.canvas.draw()
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    if show:
+        plt.show()
+    plt.close()
+
+    # Count the PSP pixels.
+    unique, counts = np.unique(data, return_counts=True)
+    projection_area = counts[1]/counts[0]
+
+    return projection_area
 
 
-# Load the STL files and add the vectors to the plot
-your_mesh = mesh.Mesh.from_file(psp_model_location)
-ax.add_collection3d(mplot3d.art3d.Poly3DCollection(your_mesh.vectors,
-                                                   facecolors=r"#ff0000",
-                                                   edgecolors="none",
-                                                   antialiased=False))
-
-# Add a unit sphere.
-u = np.linspace(0, 2 * np.pi, 1000)
-v = np.linspace(0, np.pi, 1000)
-
-x = 5 + 1/np.sqrt(2*np.pi) * np.outer(np.cos(u), np.sin(v))
-y = -4 + 1/np.sqrt(2*np.pi) * np.outer(np.sin(u), np.sin(v))
-z = -4 + 1/np.sqrt(2*np.pi) * np.outer(np.ones(np.size(u)), np.cos(v))
-ax.plot_surface(x, y, z, color='k', antialiased=False)
-
-# Auto scale to the mesh size
-scale = your_mesh.points.flatten()
-ax.auto_scale_xyz(scale, scale, scale)
-
-# Show the plot to the screen
-ax.set_aspect('equal')
-plt.axis('off')
-
-# Now we can save it to a numpy array.
-fig.canvas.draw()
-data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
-#data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
-data = np.reshape(data,(-1,3))
-fig.show()
-print(set(data))
-
+#%%
+if __name__ == "__main__":
+    print(psp_projection(0,0,0,1))
