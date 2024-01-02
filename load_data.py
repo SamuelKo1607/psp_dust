@@ -4,6 +4,7 @@ import cdflib
 import pickle
 import datetime as dt
 import numpy as np
+from scipy import io
 
 from fetch_data import psp_dust_load
 from conversions import tt2000_to_date
@@ -12,6 +13,7 @@ from ephemeris import get_state
 
 from paths import l3_dust_location
 from paths import all_obs_location
+from paths import exposure_location
 from paths import psp_ephemeris_file
 from ephemeris import r_sun
 from ephemeris import au
@@ -30,6 +32,7 @@ class Observation:
                  rate_wav, #[s^-1], wave-effects corrected
                  rate_ucc, #[s^-1], undercounting corrected
                  count_raw, #[1], raw count
+                 t_obs_eff, #[]
                  inbound,
                  ej2000,
                  heliocentric_distance,
@@ -47,14 +50,12 @@ class Observation:
         self.rate_wav = rate_wav
         self.rate_ucc = rate_ucc
         self.count_raw = count_raw
+        self.t_obs_eff = t_obs_eff #[s]
         if count_raw == 0:
-            # if no dust was observed in the period of interest,
-            # it is assumed that the measurement did not happen
-            self.t_obs_eff = 1e-9                    #[s]
+            # if no dust was observed in the period of interest
             self.count_corrected = 0
         else:
             self.count_corrected = np.round(count_raw*(rate_ucc/rate_wav))
-            self.t_obs_eff = count_raw / rate_wav    #[s]
         self.duty_hours = self.t_obs_eff / 3600
         self.inbound = inbound
         self.ej2000 = ej2000
@@ -221,7 +222,10 @@ def list_cdf(location=l3_dust_location):
     return files
 
 
-def build_obs_from_cdf(cdf_file):
+def build_obs_from_cdf(cdf_file,
+                       exposure_success=False,
+                       twin=np.zeros(3),
+                       twav=np.zeros(3)):
     """
     A function to build a list of observations extracted from one cdf file.
 
@@ -229,6 +233,13 @@ def build_obs_from_cdf(cdf_file):
     ----------
     cdf_file : cdflib.cdfread.CDF
         The PSP L3 dust cdf file to extract data from. 
+    exposure_success : bool, optional
+        Whether the exposure info is provided. The default is False.
+    twin : 3-elements np.array of float, 1D
+        The observation time in seconds. Zeroes if success == False.
+    twav : 3-elements np.array of float, 1D
+        The waveform time in seconds. During this time, potential dust 
+        impacts are obscured by waveforms. Zeroes if success == False.
 
     Returns
     -------
@@ -252,7 +263,7 @@ def build_obs_from_cdf(cdf_file):
 
     # Check the fromat.
     if len(epochs) != 3:
-        raise Exception(f"unexpected structure: {len(epochs)} != 3")
+        raise Exception(f"unexp. struct. @ {YYYYMMDD[0]}: {len(epochs)} != 3")
 
     # Make the Observations.
     rate_seg_starts = epochs - (epochs[1]-epochs[0])//2
@@ -265,10 +276,18 @@ def build_obs_from_cdf(cdf_file):
 
         # Get the counts.
         count_observed = len(event_epochs[
-                                    (event_epochs > rate_seg_starts[i])
+                                     (event_epochs > rate_seg_starts[i])
                                     *(event_epochs < rate_seg_ends[i]) ])
 
-        # Make the Observation.
+        # Get the observation time.
+        if exposure_success:
+            t_obs_eff = twin[i] - twav[i]
+        elif rate_wav[i]:
+            t_obs_eff = count_observed / rate_wav[i]
+        else:
+            raise Exception(f"no exposure info @ {YYYYMMDD[0]}")
+
+        # Make the Observation, if we have good enough data.
         observations.append(Observation(date = dates[i],
                                         epoch_center = epoch,
                                         epochs_on_day = len(epochs),
@@ -276,6 +295,7 @@ def build_obs_from_cdf(cdf_file):
                                         rate_wav = rate_wav[i],
                                         rate_ucc = rate_ucc[i],
                                         count_raw = count_observed,
+                                        t_obs_eff = t_obs_eff,
                                         inbound = inbound[i],
                                         ej2000 = [ej2000_x[i],
                                                   ej2000_y[i],
@@ -288,6 +308,46 @@ def build_obs_from_cdf(cdf_file):
                                         ))
 
     return observations
+
+
+def get_exposure_info(YYYYMMDD,
+                      exposure_location = exposure_location):
+    """
+    A function to access and provide the exposure times for a given 
+    PSP measurement day.
+
+    Parameters
+    ----------
+    YYYYMMDD : str
+        The date of interest.
+    exposure_location : str, optional
+        The location of the .mat files. The default is exposure_location.
+
+    Returns
+    -------
+    success : bool
+        Whether we have a hit on the date of interest.
+    twin : 3-elements np.array of float, 1D
+        The observation time in seconds. Zeroes if success == False.
+    twav : 3-elements np.array of float, 1D
+        The waveform time in seconds. During this time, potential dust 
+        impacts are obscured by waveforms. Zeroes if success == False.
+    """
+    exposure_file = glob.glob(os.path.join(exposure_location,
+                                           "psp_fld_l3_dust_rates_events_*"
+                                           +YYYYMMDD
+                                           +"*.mat"))
+    if len(exposure_file):
+        mat = io.loadmat(exposure_file[0])
+        twin = mat['psp_fld_l3_dust_V2_rate_Twin'][0]
+        twav = mat['psp_fld_l3_dust_V2_rate_Twav'][0]
+        success = True
+    else:
+        twin = np.zeros(3)
+        twav = np.zeros(3)
+        success = False
+
+    return success, twin, twav
 
 
 def main(dust_location=l3_dust_location,
@@ -311,22 +371,24 @@ def main(dust_location=l3_dust_location,
     -------
     observation : list of Observation
         The agregated data.
-
     """
     observations = []
     for file in list_cdf(dust_location):
         cdf_file = cdflib.CDF(file)
-        short_name = str(cdf_file.cdf_info().CDF)[
+        cdf_short_name = str(cdf_file.cdf_info().CDF)[
                              str(cdf_file.cdf_info().CDF).find("psp_fld_l3_")
                              :-4]
+
+        YYYYMMDD = file[-16:-8]
+
+        success, twin, twav = get_exposure_info(YYYYMMDD)
+
         try:
-            observation = build_obs_from_cdf(cdf_file)
+            observation = build_obs_from_cdf(cdf_file,success,twin,twav)
         except Exception as err:
-            print(f"{short_name}: {err}")
+            print(f"{cdf_short_name}: {err}")
         else:
             observations.extend(observation)
-
-
 
     if save:
         save_list(observations,
@@ -339,4 +401,9 @@ def main(dust_location=l3_dust_location,
 #%%
 if __name__ == "__main__":
     main()
+
+
+
+
+
 
