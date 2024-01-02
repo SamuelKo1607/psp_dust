@@ -30,7 +30,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                                           "prior.e_b_v",
                                           "prior.e_a_r",
                                           "prior.e_b_r"), 
-                                  theta=NULL, feed_x=NULL){
+                                  theta=NULL, feed_x=NULL, feed_c=NULL, feed_h=NULL){
 
   envir <- parent.env(environment())
   prec.high = exp(15)
@@ -58,9 +58,21 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   }
   
   rate <- function(#covariates
-                   v_sc_r, v_sc_t, r_sc, v_sc_x, v_sc_y, v_sc_z, area,  
+                   v_sc_r = feed_c[1], 
+                   v_sc_t = feed_c[2], 
+                   r_sc =   feed_c[3], 
+                   v_sc_x = feed_c[4], 
+                   v_sc_y = feed_c[5], 
+                   v_sc_z = feed_c[6], 
+                   area =   feed_c[7],  
                    #hyperparam
-                   l_a, l_b, v_b_r, e_a_v, e_b_v, e_a_r, e_b_r,      
+                   l_a =   feed_h[1], 
+                   l_b =   feed_h[2], 
+                   v_b_r = feed_h[3], 
+                   e_a_v = feed_h[4], 
+                   e_b_v = feed_h[5], 
+                   e_a_r = feed_h[6], 
+                   e_b_r = feed_h[7],      
                    #bound dust parameters
  
                    #beta met. parameters
@@ -222,7 +234,7 @@ n = length(mydata$vr)
 mydata$idx = 1:n 
 
 #filterinng to far-from the Sun only
-mydata_far <- subset(mydata, r > 0.25 & flux > 0)
+mydata_far <- subset(mydata, r > 0.25 & sc_id == 2 & exposure > 1e-6)
 
 
 ###################################
@@ -245,16 +257,13 @@ result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
 
 summary(result)
 
+par(mfrow = c(1, 1))
 hist(result$cpo$pit)     # ok 
 max(result$cpo$failure)       # also OK
 #pit = result$cpo$pit
 #save(pit, file = "998_generated\\inla\\pit.RData")
 
-#plotting
-par(mfrow = c(1, 1))
-plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
-lines(result$summary.fitted.values$mean, col=2, lwd=3)
-
+#plotting histogram
 span = round(max(abs(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean),40)+0.5)
 hist(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean,
      breaks=c(-span:span),
@@ -265,13 +274,13 @@ mtext(paste("residuals histogram, stdev = ",
             result$mlik[1]), side=3)
   
 # Posterior means of the hyperparameters
-inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
-inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
-result$summary.hyperpar$mean[3]
-result$summary.hyperpar$mean[4]
-result$summary.hyperpar$mean[5]
-result$summary.hyperpar$mean[6]
-result$summary.hyperpar$mean[7]
+l_a.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
+l_b.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
+v_b_r.mean = result$summary.hyperpar$mean[3]
+e_a_v.mean = result$summary.hyperpar$mean[4]
+e_b_v.mean = result$summary.hyperpar$mean[5]
+e_a_r.mean = result$summary.hyperpar$mean[6]
+e_b_r.mean = result$summary.hyperpar$mean[7]
 
 # Create a layout with one column and seven rows
 par(mfrow = c(7, 1), mar = c(2, 2, 1, 1))
@@ -294,6 +303,91 @@ text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 *
 par(mfrow = c(1, 1))
 
 
+###################################
+####### Rate decomposition ########
+###################################
+
+len = length(mydata_far$Julian.date)
+total_rate = numeric(len)
+bound_rate = numeric(len)
+beta_rate = numeric(len)
+
+samples = 100
+s = inla.hyperpar.sample(samples, result)
+sample_l_a   = exp(s[,1])
+sample_l_b   = exp(s[,2])
+sample_v_b_r =     s[,3]
+sample_e_a_v =     s[,4]
+sample_e_b_v =     s[,5]
+sample_e_a_r =     s[,6]
+sample_e_b_r =     s[,7]
+
+for (i in 1:len) {
+  particuler_total_rates = numeric(samples)
+  particuler_bound_rates = numeric(samples)
+  particuler_beta_rates  = numeric(samples)
+  for (j in 1:samples) {
+    particuler_total_rates[j] <- three_component_model(cmd="rate", 
+                                           feed_c = c(mydata_far$vr[i],
+                                                      mydata_far$vt[i],
+                                                      mydata_far$r[i],
+                                                      mydata_far$vx[i],
+                                                      mydata_far$vy[i],
+                                                      mydata_far$vz[i],
+                                                      mydata_far$area[i]),
+                                           feed_h = c(sample_l_a[j],
+                                                      sample_l_b[j],
+                                                      sample_v_b_r[j],
+                                                      sample_e_a_v[j],
+                                                      sample_e_b_v[j],
+                                                      sample_e_a_r[j],
+                                                      sample_e_b_r[j]))
+    particuler_bound_rates[j] <- three_component_model(cmd="rate", 
+                                           feed_c = c(mydata_far$vr[i],
+                                                      mydata_far$vt[i],
+                                                      mydata_far$r[i],
+                                                      mydata_far$vx[i],
+                                                      mydata_far$vy[i],
+                                                      mydata_far$vz[i],
+                                                      mydata_far$area[i]),
+                                           feed_h = c(sample_l_a[j],
+                                                      0,
+                                                      sample_v_b_r[j],
+                                                      sample_e_a_v[j],
+                                                      sample_e_b_v[j],
+                                                      sample_e_a_r[j],
+                                                      sample_e_b_r[j]))
+    particuler_beta_rates[j] <- three_component_model(cmd="rate", 
+                                           feed_c = c(mydata_far$vr[i],
+                                                      mydata_far$vt[i],
+                                                      mydata_far$r[i],
+                                                      mydata_far$vx[i],
+                                                      mydata_far$vy[i],
+                                                      mydata_far$vz[i],
+                                                      mydata_far$area[i]),
+                                           feed_h = c(0,
+                                                      sample_l_b[j],
+                                                      sample_v_b_r[j],
+                                                      sample_e_a_v[j],
+                                                      sample_e_b_v[j],
+                                                      sample_e_a_r[j],
+                                                      sample_e_b_r[j]))
+
+  }
+  total_rate[i] <- mean(particuler_total_rates)
+  bound_rate[i] <- mean(particuler_bound_rates)
+  beta_rate[i]  <- mean(particuler_beta_rates)
+}
+
+par(mfrow = c(1, 1))
+plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
+lines(result$summary.fitted.values$mean, col=2, lwd=3)
+lines(bound_rate / total_rate * result$summary.fitted.values$mean, col=3, lwd=3)
+lines(beta_rate / total_rate * result$summary.fitted.values$mean, col=4, lwd=3)
+legend(0, 50, legend=c("total", "bound", "beta"),
+       col = c(2, 3, 4),
+       lty = c(1, 1, 1),
+       lwd = c(3, 3, 3))
 
 ###################################
 ### Priors and post. evaluation ###
