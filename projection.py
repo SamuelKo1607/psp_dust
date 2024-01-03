@@ -13,7 +13,8 @@ def psp_projection(elev=0,
                    azim=0,
                    roll=0,
                    show=False,
-                   dpi=2000):
+                   dpi=2000,
+                   distinct_heat_shield=False):
     """
     A function for getting the projection area of PSP when seen 
     from an aribtrary angle.
@@ -41,14 +42,14 @@ def psp_projection(elev=0,
 
     # Create a new plot
     fig = plt.figure(dpi=dpi)
-    ax = fig.add_subplot(projection='3d')
+    ax = fig.add_subplot(projection='3d',computed_zorder=False)
     ax.set_proj_type('ortho')
     ax.view_init(elev=elev, azim=azim, roll=roll)
 
     # Load the STL files and add the vectors to the plot
     your_mesh = mesh.Mesh.from_file(psp_model_location)
     ax.add_collection3d(mplot3d.art3d.Poly3DCollection(your_mesh.vectors,
-                                                       facecolors=r"#aaaaaa",
+                                                       facecolors=r"#999999",
                                                        edgecolors="none",
                                                        antialiased=False))
     # Add a unit sphere.
@@ -58,7 +59,22 @@ def psp_projection(elev=0,
     y = -4 + 1/np.sqrt(np.pi) * np.outer(np.sin(u), np.sin(v))
     z = -4 + 1/np.sqrt(np.pi) * np.outer(np.ones(np.size(u)), np.cos(v))
     ax.plot_surface(x, y, z, color=r"#000000", antialiased=False)
-    
+
+    #shield
+    if distinct_heat_shield:
+        if -90 < elev < 90 and 0 < azim < 180:
+            mask = np.zeros(0,dtype=bool)
+            for i in range(len(your_mesh.vectors[:,0,0])):
+                face = your_mesh.vectors[i,:,:]
+                include = np.any(face[:,1]>=1.480)
+                mask = np.append(mask,include)
+            shield = your_mesh.vectors[mask,:,:]
+            ax.add_collection3d(mplot3d.art3d.Poly3DCollection(
+                shield,
+                facecolors=r"#cccccc",
+                edgecolors="none",
+                antialiased=False))
+
     # Auto scale to the mesh size
     scale = your_mesh.points.flatten()
     ax.auto_scale_xyz(scale, scale, scale)
@@ -72,7 +88,7 @@ def psp_projection(elev=0,
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     if show:
         plt.show()
-    plt.close()
+    #plt.close()
 
     # Count the PSP pixels.
     unique, counts = np.unique(data, return_counts=True)
@@ -83,4 +99,4 @@ def psp_projection(elev=0,
 
 #%%
 if __name__ == "__main__":
-    print(psp_projection(0,0,0,1))
+    print(psp_projection(20,60,0,1,distinct_heat_shield=True))
