@@ -29,14 +29,15 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                                           "prior.e_a_v",
                                           "prior.e_b_v",
                                           "prior.e_a_r",
-                                          "prior.e_b_r"), 
+                                          "prior.e_b_r",
+                                          "prior.shield_sens"), 
                                   theta=NULL, feed_x=NULL, feed_c=NULL, feed_h=NULL){
 
   envir <- parent.env(environment())
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a, shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_a,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){
     return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
@@ -45,7 +46,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(dnorm(v_b_r,  mean  = 50,    sd   = 1,    log=TRUE))
   }
   prior.e_a_v <- function(e_a_v=feed_x){
-    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.05, log=TRUE))
+    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.01, log=TRUE))
   }
   prior.e_b_v <- function(e_b_v=feed_x){
     return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.01, log=TRUE))
@@ -56,6 +57,9 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prior.e_b_r <- function(e_b_r=feed_x){
     return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.001, log=TRUE))
   }
+  prior.shield_sens <- function(shield_sens=feed_x){
+    return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
+  }
   
   rate <- function(#covariates
                    v_sc_r = feed_c[1], 
@@ -64,7 +68,8 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                    v_sc_x = feed_c[4], 
                    v_sc_y = feed_c[5], 
                    v_sc_z = feed_c[6], 
-                   area =   feed_c[7],  
+                   area_front = feed_c[7],
+                   area_side =  feed_c[8],
                    #hyperparam
                    l_a =   feed_h[1], 
                    l_b =   feed_h[2], 
@@ -72,7 +77,8 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                    e_a_v = feed_h[4], 
                    e_b_v = feed_h[5], 
                    e_a_r = feed_h[6], 
-                   e_b_r = feed_h[7],      
+                   e_b_r = feed_h[7],
+                   shield_sens = feed_h[8],
                    #bound dust parameters
  
                    #beta met. parameters
@@ -89,29 +95,53 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     ksi = -2 - e_b_r
     r_factor = r_sc/1
     v_factor = ( (
-      ( v_sc_r - ( v_b_r*(r_factor^ksi)  ) )^2 
-      + ( v_sc_t - ( v_b_a*(r_factor^(-1)) ) )^2
-    )^0.5 
-    ) / ( (
-      ( v_b_r )^2 
-      + ( v_earth_a - v_b_a )^2
-    )^0.5 
-    )
-    L_b = l_b * (v_factor)^e_b_v * (r_factor)^e_b_r 
+        ( v_sc_r - ( v_b_r*(r_factor^ksi)  ) )^2 
+        + ( v_sc_t - ( v_b_a*(r_factor^(-1)) ) )^2
+      )^0.5 
+      ) / ( (
+        ( v_b_r )^2 
+        + ( v_earth_a - v_b_a )^2
+      )^0.5 
+      )
+    radial_impact_velocity = -1* ( v_sc_r - ( v_b_r*(r_factor^ksi) ) ) 
+      #positive is on the heatshield, negative on the tail
+    azimuthal_impact_velocity = abs( v_sc_t - ( v_b_a*(r_factor^(-1)) ) )
+      #always positive, RHS vs LHS plays no role
+    impact_angle = atan( azimuthal_impact_velocity / radial_impact_velocity )
+    
+    frontside = radial_impact_velocity > 0
+    backside = (frontside != TRUE)
+    area = (   frontside * shield_sens * area_front * cos(impact_angle) 
+               + backside  * 1           * area_front * cos(impact_angle) 
+               + area_side * sin(abs(impact_angle)) )
+    
+    L_b = l_b * area * (v_factor)^e_b_v * (r_factor)^e_b_r 
     
     #bound dust contribution
     ksi = -2 - e_a_r
     r_factor = r_sc/1
     v_a_a = 29.8*(r_factor^(-1))
     v_factor = ( (
-      ( v_sc_r )^2 
-      + ( v_sc_t - v_a_a )^2
-    )^0.5 
-    ) / abs( v_earth_a - v_a_a )
-    L_a = l_a * (v_factor)^e_a_v * (r_factor)^e_a_r
+        ( v_sc_r )^2 
+        + ( v_sc_t - v_a_a )^2
+      )^0.5 
+      ) / abs( v_earth_a - v_a_a )
+    radial_impact_velocity = -1* ( v_sc_r ) 
+      #positive is on the heatshield, negative on the tail
+    azimuthal_impact_velocity = abs( v_sc_t - v_a_a )
+      #always positive, RHS vs LHS plays no role
+    impact_angle = atan( azimuthal_impact_velocity / radial_impact_velocity )
     
-    #normalization to hourly rate, while L_i are in m^-2 s^-1
-    hourly_rate = 3600 * area * ( L_b + L_a )
+    frontside = radial_impact_velocity > 0
+    backside = (frontside != TRUE)
+    area = (   frontside * shield_sens * area_front * cos(impact_angle) 
+             + backside  * 1           * area_front * cos(impact_angle) 
+             + area_side * sin(abs(impact_angle)) )
+    
+    L_a = l_a * area * (v_factor)^e_a_v * (r_factor)^e_a_r
+    
+    #normalization to hourly rate, while L_i are in s^-1
+    hourly_rate = 3600 * ( L_b + L_a )
     return(hourly_rate)
   }
   
@@ -124,7 +154,8 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                 e_a_v = theta[4L], 
                 e_b_v = theta[5L],
                 e_a_r = theta[6L],
-                e_b_r = theta[7L]
+                e_b_r = theta[7L],
+                shield_sens = exp(theta[8L])
                ))
   }
   
@@ -142,7 +173,7 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   mu <- function(){
     par = interpret.theta()
     return(log( rate(#covariates
-                     vr, vt, r, vx, vy, vz, area,
+                     vr, vt, r, vx, vy, vz, area_front, area_side,
                      #hyperparameters
                      par$l_a, 
                      par$l_b, 
@@ -150,7 +181,8 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                      par$e_a_v, 
                      par$e_b_v, 
                      par$e_a_r,
-                     par$e_b_r
+                     par$e_b_r,
+                     par$shield_sens
                      )
               ))
   }
@@ -164,13 +196,14 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     par = interpret.theta()
     
     #nice priors
-    val <- (prior.l_a(      par$l_a)     + theta[1L] +
-            prior.l_b(      par$l_b)     + theta[2L] +
-            prior.v_b_r(    par$v_b_r)   +
-            prior.e_a_v(    par$e_a_v)   + 
-            prior.e_b_v(    par$e_b_v)   + 
-            prior.e_a_r(    par$e_a_r)   +
-            prior.e_b_r(    par$e_b_r)
+    val <- (prior.l_a(          par$l_a)     + theta[1L] +
+            prior.l_b(          par$l_b)     + theta[2L] +
+            prior.v_b_r(        par$v_b_r)   +
+            prior.e_a_v(        par$e_a_v)   + 
+            prior.e_b_v(        par$e_b_v)   + 
+            prior.e_a_r(        par$e_a_r)   +
+            prior.e_b_r(        par$e_b_r)   +
+            prior.shield_sens(  par$shield_sens) + theta[8L]
            )
   
     return(val)
@@ -179,13 +212,14 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   # Initial values of theta
   initial <- function(){
     #initial values set to the maxima a priori
-    return(c(log(optimize(prior.l_a, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
-             log(optimize(prior.l_b, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
-             optimize(prior.v_b_r, interval = c(  0, 1000), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_a_v, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_b_v, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_a_r, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_b_r, interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum
+    return(c(log(optimize(prior.l_a,  interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
+             log(optimize(prior.l_b,  interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
+             optimize(prior.v_b_r,  interval = c(  0, 1000), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_a_v,  interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_b_v,  interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_a_r,  interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             optimize(prior.e_b_r,  interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
+             log(optimize(prior.shield_sens, interval = c(0, 1), maximum = TRUE, tol=1e-6)$maximum)
             )
           )
   }
@@ -213,7 +247,8 @@ names(mydata_solo)[c(2,3,4,5,6,9,10,11)] = c("flux",
                                              "vx",
                                              "vy",
                                              "vz")
-mydata_solo$area = 8
+mydata_solo$area_front = 8
+mydata_solo$area_side = 8
 mydata_solo$sc_id = 1
 
 mydata_psp = read.csv(file = myfile_psp)
@@ -225,7 +260,8 @@ names(mydata_psp)[c(2,3,4,5,6,9,10,11)] = c("flux",
                                             "vx",
                                             "vy",
                                             "vz")
-mydata_psp$area = 6
+mydata_psp$area_front = 6.12
+mydata_psp$area_side = 4.63
 mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
@@ -249,7 +285,8 @@ rgen = inla.rgeneric.define(model = three_component_model,
                             vx = mydata$vx,
                             vy = mydata$vy,
                             vz = mydata$vz,
-                            area = mydata$area)
+                            area_front = mydata$area_front,
+                            area_side  = mydata$area_side)
 result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
               data = mydata_far, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
@@ -281,9 +318,10 @@ e_a_v.mean = result$summary.hyperpar$mean[4]
 e_b_v.mean = result$summary.hyperpar$mean[5]
 e_a_r.mean = result$summary.hyperpar$mean[6]
 e_b_r.mean = result$summary.hyperpar$mean[7]
+shield_sens.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta8 for idx`)
 
 # Create a layout with one column and seven rows
-par(mfrow = c(7, 1), mar = c(2, 2, 1, 1))
+par(mfrow = c(8, 1), mar = c(2, 2, 1, 1))
 # Plot each function in a separate row
 plot(exp(result$marginals.hyperpar$`Theta1 for idx`[1:43]),result$marginals.hyperpar$`Theta1 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_a", col = "red", cex = 1.5)
@@ -299,6 +337,8 @@ plot((result$marginals.hyperpar$`Theta6 for idx`[1:43]),result$marginals.hyperpa
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_a_r", col = "red", cex = 1.5)
 plot((result$marginals.hyperpar$`Theta7 for idx`[1:43]),result$marginals.hyperpar$`Theta7 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_b_r", col = "red", cex = 1.5)
+plot(exp(result$marginals.hyperpar$`Theta8 for idx`[1:43]),result$marginals.hyperpar$`Theta8 for idx`[44:86])
+text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "shield_sens", col = "red", cex = 1.5)
 # Reset the layout to the default (1x1)
 par(mfrow = c(1, 1))
 
@@ -314,13 +354,14 @@ beta_rate = numeric(len)
 
 samples = 100
 s = inla.hyperpar.sample(samples, result)
-sample_l_a   = exp(s[,1])
-sample_l_b   = exp(s[,2])
-sample_v_b_r =     s[,3]
-sample_e_a_v =     s[,4]
-sample_e_b_v =     s[,5]
-sample_e_a_r =     s[,6]
-sample_e_b_r =     s[,7]
+sample_l_a   =       exp(s[,1])
+sample_l_b   =       exp(s[,2])
+sample_v_b_r =       s[,3]
+sample_e_a_v =       s[,4]
+sample_e_b_v =       s[,5]
+sample_e_a_r =       s[,6]
+sample_e_b_r =       s[,7]
+sample_shield_sens = exp(s[,8])
 
 for (i in 1:len) {
   particuler_total_rates = numeric(samples)
@@ -334,14 +375,16 @@ for (i in 1:len) {
                                                       mydata_far$vx[i],
                                                       mydata_far$vy[i],
                                                       mydata_far$vz[i],
-                                                      mydata_far$area[i]),
+                                                      mydata_far$area_front[i],
+                                                      mydata_far$area_side[i]),
                                            feed_h = c(sample_l_a[j],
                                                       sample_l_b[j],
                                                       sample_v_b_r[j],
                                                       sample_e_a_v[j],
                                                       sample_e_b_v[j],
                                                       sample_e_a_r[j],
-                                                      sample_e_b_r[j]))
+                                                      sample_e_b_r[j],
+                                                      sample_shield_sens[j]))
     particuler_bound_rates[j] <- three_component_model(cmd="rate", 
                                            feed_c = c(mydata_far$vr[i],
                                                       mydata_far$vt[i],
@@ -349,14 +392,16 @@ for (i in 1:len) {
                                                       mydata_far$vx[i],
                                                       mydata_far$vy[i],
                                                       mydata_far$vz[i],
-                                                      mydata_far$area[i]),
+                                                      mydata_far$area_front[i],
+                                                      mydata_far$area_side[i]),
                                            feed_h = c(sample_l_a[j],
                                                       0,
                                                       sample_v_b_r[j],
                                                       sample_e_a_v[j],
                                                       sample_e_b_v[j],
                                                       sample_e_a_r[j],
-                                                      sample_e_b_r[j]))
+                                                      sample_e_b_r[j],
+                                                      sample_shield_sens[j]))
     particuler_beta_rates[j] <- three_component_model(cmd="rate", 
                                            feed_c = c(mydata_far$vr[i],
                                                       mydata_far$vt[i],
@@ -364,14 +409,16 @@ for (i in 1:len) {
                                                       mydata_far$vx[i],
                                                       mydata_far$vy[i],
                                                       mydata_far$vz[i],
-                                                      mydata_far$area[i]),
+                                                      mydata_far$area_front[i],
+                                                      mydata_far$area_side[i]),
                                            feed_h = c(0,
                                                       sample_l_b[j],
                                                       sample_v_b_r[j],
                                                       sample_e_a_v[j],
                                                       sample_e_b_v[j],
                                                       sample_e_a_r[j],
-                                                      sample_e_b_r[j]))
+                                                      sample_e_b_r[j],
+                                                      sample_shield_sens[j]))
 
   }
   total_rate[i] <- mean(particuler_total_rates)
@@ -382,12 +429,16 @@ for (i in 1:len) {
 par(mfrow = c(1, 1))
 plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
 lines(result$summary.fitted.values$mean, col=2, lwd=3)
+#normalization due to random effect, has no meaning with a single spacecraft
 lines(bound_rate / total_rate * result$summary.fitted.values$mean, col=3, lwd=3)
 lines(beta_rate / total_rate * result$summary.fitted.values$mean, col=4, lwd=3)
 legend(0, 50, legend=c("total", "bound", "beta"),
        col = c(2, 3, 4),
        lty = c(1, 1, 1),
        lwd = c(3, 3, 3))
+
+
+
 
 ###################################
 ### Priors and post. evaluation ###
