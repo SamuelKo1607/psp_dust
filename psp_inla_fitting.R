@@ -445,49 +445,52 @@ legend(0, 50, legend=c("total", "bound", "beta"),
 ###################################
 
 #posteriors to be saved in X/Y form
-#l_bg
-fx_l_bg = exp(result$marginals.hyperpar$`Theta1 for idx`[1:43])
-fy_l_bg = result$marginals.hyperpar$`Theta1 for idx`[44:86]
 #l_a
-fx_l_a = exp(result$marginals.hyperpar$`Theta2 for idx`[1:43])
-fy_l_a = result$marginals.hyperpar$`Theta2 for idx`[44:86]
+fx_l_a = exp(result$marginals.hyperpar$`Theta1 for idx`[1:43])
+fy_l_a = result$marginals.hyperpar$`Theta1 for idx`[44:86]
 #l_b
-fx_l_b = exp(result$marginals.hyperpar$`Theta3 for idx`[1:43])
-fy_l_b = result$marginals.hyperpar$`Theta3 for idx`[44:86]
+fx_l_b = exp(result$marginals.hyperpar$`Theta2 for idx`[1:43])
+fy_l_b = result$marginals.hyperpar$`Theta2 for idx`[44:86]
 #v_b_r
-fx_v_b_r = result$marginals.hyperpar$`Theta4 for idx`[1:43]
-fy_v_b_r = result$marginals.hyperpar$`Theta4 for idx`[44:86]
-#e_v
-fx_e_v = result$marginals.hyperpar$`Theta5 for idx`[1:43]
-fy_e_v = result$marginals.hyperpar$`Theta5 for idx`[44:86]
+fx_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[1:43]
+fy_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[44:86]
+#e_a_v
+fx_e_a_v = result$marginals.hyperpar$`Theta4 for idx`[1:43]
+fy_e_a_v = result$marginals.hyperpar$`Theta4 for idx`[44:86]
+#e_b_v
+fx_e_b_v = result$marginals.hyperpar$`Theta5 for idx`[1:43]
+fy_e_b_v = result$marginals.hyperpar$`Theta5 for idx`[44:86]
 #e_a_r
 fx_e_a_r = result$marginals.hyperpar$`Theta6 for idx`[1:43]
 fy_e_a_r = result$marginals.hyperpar$`Theta6 for idx`[44:86]
 #e_b_r
 fx_e_b_r = result$marginals.hyperpar$`Theta7 for idx`[1:43]
 fy_e_b_r = result$marginals.hyperpar$`Theta7 for idx`[44:86]
+#shield_sens
+fx_shield_sens = exp(result$marginals.hyperpar$`Theta8 for idx`[1:43])
+fy_shield_sens = result$marginals.hyperpar$`Theta8 for idx`[44:86]
 
 #priors to be saved in X/Y form
+
 #log priors extracted
-prior.l_bg  <- function(x){ 
-  return((three_component_model(cmd="prior.l_bg", feed_x=x))) }
 prior.l_a <- function(x){
-  return((three_component_model(cmd="prior.l_a",feed_x=x))) }
+  return((three_component_model(cmd="prior.l_a",    feed_x=x))) }
 prior.l_b   <- function(x){
-  return((three_component_model(cmd="prior.l_b",  feed_x=x))) }
+  return((three_component_model(cmd="prior.l_b",    feed_x=x))) }
 prior.v_b_r <- function(x){
-  return((three_component_model(cmd="prior.v_b_r",feed_x=x))) }
-prior.e_v   <- function(x){
-  return((three_component_model(cmd="prior.e_v",  feed_x=x))) }
+  return((three_component_model(cmd="prior.v_b_r",  feed_x=x))) }
+prior.e_a_v   <- function(x){
+  return((three_component_model(cmd="prior.e_a_v",  feed_x=x))) }
+prior.e_b_v   <- function(x){
+  return((three_component_model(cmd="prior.e_b_v",  feed_x=x))) }
 prior.e_a_r   <- function(x){
   return((three_component_model(cmd="prior.e_a_r",  feed_x=x))) }
 prior.e_b_r   <- function(x){
   return((three_component_model(cmd="prior.e_b_r",  feed_x=x))) }
+prior.shield_sens   <- function(x){
+  return((three_component_model(cmd="prior.shield_sens",  feed_x=x))) }
+
 #priors evaluated
-#l_bg
-p_l_bg_max = optimize(prior.l_bg, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_l_bg = seq(p_l_bg_max/1000, p_l_bg_max*100, length.out = 100000)
-py_l_bg = exp(prior.l_bg(px_l_bg))
 #l_a
 p_l_a_max = optimize(prior.l_a, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
 px_l_a = seq(p_l_a_max/1000, p_l_a_max*100, length.out = 100000)
@@ -500,10 +503,14 @@ py_l_b = exp(prior.l_b(px_l_b))
 p_l_v_b_r_max = optimize(prior.v_b_r, interval = c(0, 10000), maximum = TRUE, tol=1e-9)$maximum
 px_v_b_r = seq(p_l_v_b_r_max/100, p_l_v_b_r_max*10, length.out = 10000)
 py_v_b_r = exp(prior.v_b_r(px_v_b_r))
-#e_v
-p_e_v_max = optimize(prior.e_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
-px_e_v = seq(p_e_v_max/5, p_e_v_max*5, length.out = 10000)
-py_e_v = exp(prior.e_v(px_e_v))
+#e_a_v
+p_e_a_v_max = optimize(prior.e_a_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
+px_e_a_v = seq(p_e_a_v_max/5, p_e_a_v_max*5, length.out = 10000)
+py_e_a_v = exp(prior.e_a_v(px_e_a_v))
+#e_b_v
+p_e_b_v_max = optimize(prior.e_b_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
+px_e_b_v = seq(p_e_b_v_max/5, p_e_b_v_max*5, length.out = 10000)
+py_e_b_v = exp(prior.e_b_v(px_e_b_v))
 #e_a_r
 p_e_a_r_max = optimize(prior.e_a_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
 px_e_a_r = seq(p_e_a_r_max*5, p_e_a_r_max/5, length.out = 10000)
@@ -512,7 +519,10 @@ py_e_a_r = exp(prior.e_a_r(px_e_a_r))
 p_e_b_r_max = optimize(prior.e_b_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
 px_e_b_r = seq(p_e_b_r_max*5, p_e_b_r_max/5, length.out = 10000)
 py_e_b_r = exp(prior.e_b_r(px_e_b_r))
-
+#shield_sens
+p_shield_sens_max = optimize(prior.shield_sens, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
+px_shield_sens = seq(p_shield_sens_max/1000, p_shield_sens_max*100, length.out = 100000)
+py_shield_sens = exp(prior.l_a(px_shield_sens))
 
 ###################################
 ######## Sample posterior  ########
@@ -520,13 +530,14 @@ py_e_b_r = exp(prior.e_b_r(px_e_b_r))
 
 s = inla.hyperpar.sample(1000000, result)
 
-sample_l_bg  = exp(s[,1])
-sample_l_a   = exp(s[,2])
-sample_l_b   = exp(s[,3])
-sample_v_b_r =     s[,4]
-sample_e_v   =     s[,5]
-sample_e_a_r =     s[,6]
-sample_e_b_r =     s[,7]
+sample_l_a   =       exp(s[,1])
+sample_l_b   =       exp(s[,2])
+sample_v_b_r =           s[,3]
+sample_e_a_v =           s[,4]
+sample_e_b_v =           s[,5]
+sample_e_a_r =           s[,6]
+sample_e_b_r =           s[,7]
+sample_shield_sens = exp(s[,8])
 
 hexbinplot(sample_v_b_r~sample_l_a, 
            data=data.frame(sample_v_b_r,sample_l_a), 
@@ -551,41 +562,46 @@ model_definition <- deparse(three_component_model)
 current_time <- Sys.time()
 formatted_time <- format(current_time, "%Y%m%d%H%M%S")
 
-save(sample_l_bg,       #sampled posterior
-     sample_l_a, 
+save(sample_l_a,        #sampled posterior
      sample_l_b, 
      sample_v_b_r, 
-     sample_e_v, 
+     sample_e_a_v,
+     sample_e_b_v,
      sample_e_a_r,
      sample_e_b_r,
-     fx_l_bg,           #evaluated posterior
-     fy_l_bg,
-     fx_l_a,
+     sample_shield_sens,
+     fx_l_a,          #evaluated posterior
      fy_l_a,
      fx_l_b,
      fy_l_b,
      fx_v_b_r,
      fy_v_b_r,
-     fx_e_v,
-     fy_e_v,
+     fx_e_a_v,
+     fy_e_a_v,
+     fx_e_b_v,
+     fy_e_b_v,
      fx_e_a_r,
      fy_e_a_r,
      fx_e_b_r,
      fy_e_b_r,
-     px_l_bg,           #evaluated prior
-     py_l_bg,
-     px_l_a,
+     fx_shield_sens,
+     fy_shield_sens,
+     px_l_a,            #evaluated prior
      py_l_a,
      px_l_b,
      py_l_b,
      px_v_b_r,
      py_v_b_r,
-     px_e_v,
-     py_e_v,
+     px_e_a_v,
+     py_e_a_v,
+     px_e_b_v,
+     py_e_b_v,
      px_e_a_r,
      py_e_a_r,
      px_e_b_r,
      py_e_b_r,
+     px_shield_sens,
+     py_shield_sens,
      model_definition,  #the model definition
      mydata,
      file = paste("998_generated\\inla\\sample_",formatted_time,".RData",
