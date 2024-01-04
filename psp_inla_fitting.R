@@ -43,19 +43,19 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 50,    sd   = 1,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 63,    sd   = 0.0001,    log=TRUE))
   }
   prior.e_a_v <- function(e_a_v=feed_x){
-    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.01, log=TRUE))
+    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.1, log=TRUE))
   }
   prior.e_b_v <- function(e_b_v=feed_x){
-    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.01, log=TRUE))
+    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.0001, log=TRUE))
   }
   prior.e_a_r <- function(e_a_r=feed_x){
-    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.001, log=TRUE))
+    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.0001, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
-    return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.001, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.6, sd   = 0.0001, log=TRUE))
   }
   prior.shield_sens <- function(shield_sens=feed_x){
     return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
@@ -252,16 +252,16 @@ mydata_solo$area_side = 8
 mydata_solo$sc_id = 1
 
 mydata_psp = read.csv(file = myfile_psp)
-names(mydata_psp)[c(2,3,4,5,6,9,10,11)] = c("flux",
-                                            "vr",
-                                            "vt",
-                                            "r",
-                                            "exposure",
-                                            "vx",
-                                            "vy",
-                                            "vz")
-mydata_psp$area_front = 6.12
-mydata_psp$area_side = 4.63
+names(mydata_psp)[c(2,3,4,5,6,9,10,11,12,13)] = c("flux",
+                                                  "vr",
+                                                  "vt",
+                                                  "r",
+                                                  "exposure",
+                                                  "vx",
+                                                  "vy",
+                                                  "vz",
+                                                  "area_front",
+                                                  "area_side")
 mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
@@ -493,36 +493,36 @@ prior.shield_sens   <- function(x){
 #priors evaluated
 #l_a
 p_l_a_max = optimize(prior.l_a, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_l_a = seq(p_l_a_max/1000, p_l_a_max*100, length.out = 100000)
+px_l_a = seq(p_l_a_max/1000, p_l_a_max*100, length.out = 1000000)
 py_l_a = exp(prior.l_a(px_l_a))
 #l_b
 p_l_b_max = optimize(prior.l_b, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_l_b = seq(p_l_b_max/1000, p_l_b_max*100, length.out = 100000)
+px_l_b = seq(p_l_b_max/1000, p_l_b_max*100, length.out = 1000000)
 py_l_b = exp(prior.l_b(px_l_b))
 #v_b_r
 p_l_v_b_r_max = optimize(prior.v_b_r, interval = c(0, 10000), maximum = TRUE, tol=1e-9)$maximum
-px_v_b_r = seq(p_l_v_b_r_max/100, p_l_v_b_r_max*10, length.out = 10000)
+px_v_b_r = seq(p_l_v_b_r_max/5, p_l_v_b_r_max*5, length.out = 1000000)
 py_v_b_r = exp(prior.v_b_r(px_v_b_r))
 #e_a_v
 p_e_a_v_max = optimize(prior.e_a_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
-px_e_a_v = seq(p_e_a_v_max/5, p_e_a_v_max*5, length.out = 10000)
+px_e_a_v = seq(p_e_a_v_max/5, p_e_a_v_max*5, length.out = 1000000)
 py_e_a_v = exp(prior.e_a_v(px_e_a_v))
 #e_b_v
 p_e_b_v_max = optimize(prior.e_b_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
-px_e_b_v = seq(p_e_b_v_max/5, p_e_b_v_max*5, length.out = 10000)
+px_e_b_v = seq(p_e_b_v_max/5, p_e_b_v_max*5, length.out = 1000000)
 py_e_b_v = exp(prior.e_b_v(px_e_b_v))
 #e_a_r
 p_e_a_r_max = optimize(prior.e_a_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
-px_e_a_r = seq(p_e_a_r_max*5, p_e_a_r_max/5, length.out = 10000)
+px_e_a_r = seq(p_e_a_r_max*5, p_e_a_r_max/5, length.out = 1000000)
 py_e_a_r = exp(prior.e_a_r(px_e_a_r))
 #e_b_r
 p_e_b_r_max = optimize(prior.e_b_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
-px_e_b_r = seq(p_e_b_r_max*5, p_e_b_r_max/5, length.out = 10000)
+px_e_b_r = seq(p_e_b_r_max*5, p_e_b_r_max/5, length.out = 1000000)
 py_e_b_r = exp(prior.e_b_r(px_e_b_r))
 #shield_sens
 p_shield_sens_max = optimize(prior.shield_sens, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_shield_sens = seq(p_shield_sens_max/1000, p_shield_sens_max*100, length.out = 100000)
-py_shield_sens = exp(prior.l_a(px_shield_sens))
+px_shield_sens = seq(p_shield_sens_max/1000, p_shield_sens_max*100, length.out = 1000000)
+py_shield_sens = exp(prior.shield_sens(px_shield_sens))
 
 ###################################
 ######## Sample posterior  ########
