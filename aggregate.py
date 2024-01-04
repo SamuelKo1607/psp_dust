@@ -42,7 +42,9 @@ def make_flux_to_fit_inla(observations,
                          "Velocity inclination [deg]",
                          "V_X (HAE) [km/s]",
                          "V_Y (HAE) [km/s]",
-                         "V_Z (HAE) [km/s]"])
+                         "V_Z (HAE) [km/s]",
+                         "Area front [m^2]",
+                         "Area side [m^2]"])
         for obs in observations:
             writer.writerow([str(obs.jd_center),
                              str(obs.count_corrected),
@@ -54,7 +56,10 @@ def make_flux_to_fit_inla(observations,
                              str(obs.velocity_inclination),
                              str(obs.velocity_HAE_x),
                              str(obs.velocity_HAE_y),
-                             str(obs.velocity_HAE_z)])
+                             str(obs.velocity_HAE_z),
+                             #TBD function from projection.py?
+                             6.12,
+                             4.63])
 
 
 
