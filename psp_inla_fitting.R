@@ -492,36 +492,40 @@ prior.shield_sens   <- function(x){
 
 #priors evaluated
 #l_a
-p_l_a_max = optimize(prior.l_a, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_l_a = seq(p_l_a_max/1000, p_l_a_max*100, length.out = 1000000)
+min_x_prior <- function(x_span_posterior,margin=5) {
+  result <- min(x_span_posterior)-margin*(max(x_span_posterior)-min(x_span_posterior)) }
+max_x_prior <- function(x_span_posterior,margin=5) {
+  result <- max(x_span_posterior)+margin*(max(x_span_posterior)-min(x_span_posterior)) }
+
+px_l_a = seq(0, max_x_prior(fx_l_a), length.out = 100000)
 py_l_a = exp(prior.l_a(px_l_a))
 #l_b
-p_l_b_max = optimize(prior.l_b, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_l_b = seq(p_l_b_max/1000, p_l_b_max*100, length.out = 1000000)
+
+px_l_b = seq(0, max_x_prior(fx_l_b), length.out = 100000)
 py_l_b = exp(prior.l_b(px_l_b))
 #v_b_r
-p_l_v_b_r_max = optimize(prior.v_b_r, interval = c(0, 10000), maximum = TRUE, tol=1e-9)$maximum
-px_v_b_r = seq(p_l_v_b_r_max/5, p_l_v_b_r_max*5, length.out = 1000000)
+
+px_v_b_r = seq(min_x_prior(fx_v_b_r), max_x_prior(fx_v_b_r), length.out = 100000)
 py_v_b_r = exp(prior.v_b_r(px_v_b_r))
 #e_a_v
-p_e_a_v_max = optimize(prior.e_a_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
-px_e_a_v = seq(p_e_a_v_max/5, p_e_a_v_max*5, length.out = 1000000)
+
+px_e_a_v = seq(min_x_prior(fx_e_a_v), max_x_prior(fx_e_a_v), length.out = 100000)
 py_e_a_v = exp(prior.e_a_v(px_e_a_v))
 #e_b_v
-p_e_b_v_max = optimize(prior.e_b_v, interval = c(0, 10), maximum = TRUE, tol=1e-9)$maximum
-px_e_b_v = seq(p_e_b_v_max/5, p_e_b_v_max*5, length.out = 1000000)
+
+px_e_b_v = seq(min_x_prior(fx_e_b_v), max_x_prior(fx_e_b_v), length.out = 100000)
 py_e_b_v = exp(prior.e_b_v(px_e_b_v))
 #e_a_r
-p_e_a_r_max = optimize(prior.e_a_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
-px_e_a_r = seq(p_e_a_r_max*5, p_e_a_r_max/5, length.out = 1000000)
+
+px_e_a_r = seq(min_x_prior(fx_e_a_r), max_x_prior(fx_e_a_r), length.out = 100000)
 py_e_a_r = exp(prior.e_a_r(px_e_a_r))
 #e_b_r
-p_e_b_r_max = optimize(prior.e_b_r, interval = c(-10, 0), maximum = TRUE, tol=1e-9)$maximum
-px_e_b_r = seq(p_e_b_r_max*5, p_e_b_r_max/5, length.out = 1000000)
+
+px_e_b_r = seq(min_x_prior(fx_e_b_r), max_x_prior(fx_e_b_r), length.out = 100000)
 py_e_b_r = exp(prior.e_b_r(px_e_b_r))
 #shield_sens
-p_shield_sens_max = optimize(prior.shield_sens, interval = c(0, 1), maximum = TRUE, tol=1e-9)$maximum
-px_shield_sens = seq(p_shield_sens_max/1000, p_shield_sens_max*100, length.out = 1000000)
+
+px_shield_sens = seq(0, 1, length.out = 10000)
 py_shield_sens = exp(prior.shield_sens(px_shield_sens))
 
 ###################################
