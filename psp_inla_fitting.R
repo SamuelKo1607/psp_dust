@@ -43,19 +43,19 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 63.4,    sd   = 0.001,    log=TRUE))
   }
   prior.e_a_v <- function(e_a_v=feed_x){
-    return(dnorm(e_a_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
+    return(dnorm(e_a_v,    mean  = 2.04,   sd   = 1, log=TRUE))
   }
   prior.e_b_v <- function(e_b_v=feed_x){
-    return(dnorm(e_b_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
+    return(dnorm(e_b_v,    mean  = 2.04,   sd   = 0.001, log=TRUE))
   }
   prior.e_a_r <- function(e_a_r=feed_x){
-    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.1, log=TRUE))
+    return(dnorm(e_a_r,    mean  = -1.0, sd   = 0.01, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
-    return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.001, log=TRUE))
   }
   prior.shield_sens <- function(shield_sens=feed_x){
     return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
@@ -287,7 +287,7 @@ rgen = inla.rgeneric.define(model = three_component_model,
                             vz = mydata$vz,
                             area_front = mydata$area_front,
                             area_side  = mydata$area_side)
-result = inla(flux ~ -1 + f(idx, model = rgen) + f(sc_id, model = "iid"),
+result = inla(flux ~ -1 + f(idx, model = rgen),# + f(sc_id, model = "iid"),
               data = mydata_far, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
               safe = TRUE, verbose = TRUE)
@@ -497,11 +497,11 @@ min_x_prior <- function(x_span_posterior,margin=5) {
 max_x_prior <- function(x_span_posterior,margin=5) {
   result <- max(x_span_posterior)+margin*(max(x_span_posterior)-min(x_span_posterior)) }
 
-px_l_a = seq(0, max_x_prior(fx_l_a), length.out = 100000)
+px_l_a = seq(0, max_x_prior(fx_l_a)*5, length.out = 100000)
 py_l_a = exp(prior.l_a(px_l_a))
 #l_b
 
-px_l_b = seq(0, max_x_prior(fx_l_b), length.out = 100000)
+px_l_b = seq(0, max_x_prior(fx_l_b)*5, length.out = 100000)
 py_l_b = exp(prior.l_b(px_l_b))
 #v_b_r
 
