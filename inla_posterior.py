@@ -257,9 +257,30 @@ class InlaResult:
         None.
 
         """
+        print("Summary posterior:")
         for att in self.atts:
             mean = np.mean(self.contents[f"sample_{att}"].to_numpy())
             stdev = np.std(self.contents[f"sample_{att}"].to_numpy())
+            print(f"{att}:\t mean = {mean:.3}\t +- {stdev:.2}")
+
+    def summary_prior(self):
+        """
+        Prints a short summary (means and variances) of the priors
+        for all the attributes.
+
+        Returns
+        -------
+        None.
+
+        """
+        print("Summary prior:")
+        for att in self.atts:
+            mean = np.average(a=self.contents[f"px_{att}"].to_numpy(),
+                              weights=self.contents[f"py_{att}"].to_numpy())
+            stdev = (np.average(a=((self.contents[f"px_{att}"].to_numpy())**2),
+                                weights=self.contents[f"py_{att}"].to_numpy())
+                     - mean**2)**0.5
+
             print(f"{att}:\t mean = {mean:.3}\t +- {stdev:.2}")
 
     def sample(self,atts=None,sample_size=None):
@@ -526,7 +547,7 @@ class InlaResult:
         ax.tick_params(axis='x',which="minor",bottom=True,top=True)
         ax.tick_params(axis='x',labelrotation=60)
         ax.tick_params(labelsize="medium")
-        ax.set_ylim(0,1400)
+        #ax.set_ylim(0,1400)
         ax.tick_params(labelleft=True,
                        labelright=True,
                        labelbottom = True,
@@ -580,6 +601,7 @@ def list_datafiles(location=inla_results):
 
 def main(file):
     result = InlaResult(file)
+    result.summary_prior()
     result.summary_posterior()
     result.plot_prior_posterior()
     result.plot_fit()
@@ -591,8 +613,7 @@ if __name__ == "__main__":
 
     list_datafiles()
 
-    files = ["sample_20240104122430.RData",
-             "sample_20240104152318.RData"]
+    files = ["sample_20240105144748_high_e_a_v.RData"]
 
     for file in files:
         main('998_generated\\inla\\'+file)
