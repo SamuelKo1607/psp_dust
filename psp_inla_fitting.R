@@ -43,19 +43,19 @@ three_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 63,    sd   = 0.0001,    log=TRUE))
+    return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7,    log=TRUE))
   }
   prior.e_a_v <- function(e_a_v=feed_x){
-    return(dnorm(e_a_v,    mean  = 2.2,   sd   = 0.1, log=TRUE))
+    return(dnorm(e_a_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
   }
   prior.e_b_v <- function(e_b_v=feed_x){
-    return(dnorm(e_b_v,    mean  = 2.2,   sd   = 0.0001, log=TRUE))
+    return(dnorm(e_b_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
   }
   prior.e_a_r <- function(e_a_r=feed_x){
-    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.0001, log=TRUE))
+    return(dnorm(e_a_r,    mean  = -1.3, sd   = 0.1, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
-    return(dnorm(e_b_r,    mean  = -1.6, sd   = 0.0001, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
   }
   prior.shield_sens <- function(shield_sens=feed_x){
     return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
