@@ -7,6 +7,7 @@ figures_location = os.path.join("998_generated","figures","")
 all_obs_location = os.path.join("998_generated","observations","")
 inla_results = os.path.join("998_generated","inla","")
 readable_data = os.path.join("data_synced","psp_flux_readable.csv")
+zero_time_csv = os.path.join("data_synced","")
 
 psp_model_location = os.path.join("data_synced","parkersolarprobe.stl")
 

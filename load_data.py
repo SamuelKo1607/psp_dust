@@ -15,6 +15,7 @@ from paths import l3_dust_location
 from paths import all_obs_location
 from paths import exposure_location
 from paths import psp_ephemeris_file
+from paths import zero_time_csv
 from ephemeris import r_sun
 from ephemeris import au
 
@@ -214,11 +215,31 @@ def list_cdf(location=l3_dust_location):
 
     Returns
     -------
-    days : list of str 
+    files : list of str 
         The available datafiles.
     """
 
     files = glob.glob(os.path.join(l3_dust_location,"psp_fld_*.cdf"))
+    return files
+
+
+def list_mat(location=exposure_location):
+    """
+    The function to list all the Matlab dust datafiles.
+
+    Parameters
+    ----------
+    location : str, optional
+        The data directory. Default is paths.exposure_location.
+
+    Returns
+    -------
+    files : list of str 
+        The available datafiles.
+    """
+
+    files = glob.glob(os.path.join(location,
+                                   "psp_fld_l3_dust_rates_events_*.mat"))
     return files
 
 
@@ -348,6 +369,72 @@ def get_exposure_info(YYYYMMDD,
         success = False
 
     return success, twin, twav
+
+
+def get_missing_data(dust_location=l3_dust_location,
+                     mat_location=exposure_location,
+                     output_csv_location=zero_time_csv,
+                     save=False):
+    """
+    A procedure to list all the rate data points based on an empty interval.
+
+    Parameters
+    ----------
+    dust_location : str, optional
+        The path to the data. The default is paths.l3_dust_location.
+    mat_location : str, optional
+        The location of the .mat files. 
+        The default is paths.exposure_location.
+    output_csv_location : str, optional
+        The target location of the .csv output. 
+        The default is paths.zero_time_csv.
+    save : bool, optional
+        Thether to save the output as a .csv. The default is False.
+
+    Raises
+    ------
+    Exception
+        if too few or too many .cdf matches for a single .mat file.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    missing_cdfs = []
+
+    if save:
+        f = open(os.path.join(output_csv_location,'zero_times.csv'),'w')
+        f.write(("YYYYMMDD,"
+                 "twin_0, twin_1, twin_2,"
+                 "rate_raw_0, rate_raw_1, rate_raw_2\n"))
+
+    for file in list_mat(mat_location):
+        YYYYMMDD = file[-12:-4]
+        success, twin, twav = get_exposure_info(YYYYMMDD)
+        if np.isclose(min(twin),0):
+            cdf_match = glob.glob(os.path.join(dust_location,
+                                               "psp_fld_l3_dust_*"
+                                               +YYYYMMDD
+                                               +"*.cdf"))
+            if len(cdf_match)==0:
+                missing_cdfs.append(YYYYMMDD)
+                print(success, twin)
+            else:
+                cdf_file = cdflib.CDF(cdf_match[0])
+                rate_raw = cdf_file.varget("psp_fld_l3_dust_V2_rate_raw")
+                line = (f"{YYYYMMDD},{twin[0]},{twin[1]},{twin[2]},"
+                        f"{rate_raw[0]},{rate_raw[1]},{rate_raw[2]}")
+                if save:
+                    f.write(line+"\n")
+                else:
+                    print(line)
+
+    if save:
+        f.close()
+
+    return missing_cdfs
 
 
 def main(dust_location=l3_dust_location,
