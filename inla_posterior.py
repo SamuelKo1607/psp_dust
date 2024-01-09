@@ -767,7 +767,7 @@ class InlaResult:
 
         # Create the plot.
         fig, ax = plt.subplots(figsize=(3*aspect, 3))
-        ax.set_ylabel("Impact rate / impact count [$day^{-1}$]"
+        ax.set_ylabel("Impact count / impact rate [$day^{-1}$]"
                       , fontsize="medium")
         ax.set_title('Dust Impacts: '+str(int(sum(counts)))
                      , fontsize="medium", fontweight="bold")
@@ -820,6 +820,21 @@ class InlaResult:
 
 
 def list_datafiles(location=inla_results):
+    """
+    Lists all the .RData files in a given directory.
+
+    Parameters
+    ----------
+    location : str, optional
+        The directory of interest. The default is inla_results.
+
+    Returns
+    -------
+    datafiles : list of str
+        The lsit of the .RData files.
+
+    """
+
     datafiles = glob.glob(inla_results+"*.RData")
     return datafiles
 
@@ -840,9 +855,10 @@ if __name__ == "__main__":
 
     list_datafiles()
 
-    files = ["sample_20240105144748_high_e_a_v.RData"]
+    files = ["sample_20240105144748_high_e_a_v.RData",
+             "sample_20240109105421_only_beta_fix_solo.RData"]
 
     for file in files:
-        #result = main('998_generated\\inla\\'+file)
-        result = InlaResult('998_generated\\inla\\'+file)
-        result.plot_counts_vs_rates()
+        result = main('998_generated\\inla\\'+file)
+        #result = InlaResult('998_generated\\inla\\'+file)
+        #result.plot_counts_vs_rates()
