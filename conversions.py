@@ -158,5 +158,8 @@ def YYYYMMDD2date(YYYYMMDD):
     day = int(YYYYMMDD[6:8])
     return dt.datetime(year,month,day)
 
+def jd2YYYYMMDD(jd):
+    return date2YYYYMMDD(jd2date(jd))
+
 def YYYYMMDD2jd(YYYYMMDD):
     return date2jd(YYYYMMDD2date(YYYYMMDD))
