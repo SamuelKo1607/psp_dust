@@ -10,9 +10,13 @@ from scipy import stats
 import pandas as pd
 
 from conversions import jd2date
+from conversions import jd2YYYYMMDD
+from load_data import Observation
+from load_data import load_all_obs
 
 from paths import inla_results
 from paths import readable_data
+from paths import all_obs_location
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -50,7 +54,8 @@ class InlaResult:
     """
     def __init__(self,
                  datafile,
-                 input_csv_readable=readable_data):
+                 input_csv_readable=readable_data,
+                 all_obs_location=all_obs_location):
         """
         The creator for the InlaResult. Loads the RData output and 
         the csv input. 
@@ -79,6 +84,8 @@ class InlaResult:
                      "e_b_r",
                      "shield_sens"]
         self.input_df = pd.read_csv(input_csv_readable)
+        self.obs = load_all_obs(all_obs_location)
+
 
     def inla_function(self):
         """
@@ -377,8 +384,8 @@ class InlaResult:
                              xrange = [[0,5e-4],
                                        [0,5e-4],
                                        [0,100],
-                                       [1,3],
-                                       [1,3],
+                                       [1,7],
+                                       [1,7],
                                        [-2,0],
                                        [-2,0],
                                        [0,1]]):
@@ -463,6 +470,31 @@ class InlaResult:
 
         return err_plusminus_flux
 
+    def get_orbit_group(self,
+                        YYYYMMDD):
+        """
+        Returns the orbital group for a given date.
+
+        Parameters
+        ----------
+        YYYYMMDD : str
+            The date of interest in the obvious format.
+
+        Returns
+        -------
+        orb_group : int
+            The orbital group.
+
+        """
+
+        orbit_group_dict = dict(zip([ob.YYYYMMDD for ob in self.obs],
+                                    [ob.encounter_group for ob in self.obs]))
+
+        orb_group = list(orbit_group_dict.values())[
+                        list(orbit_group_dict.keys()).index(YYYYMMDD)]
+
+        return orb_group
+
     def plot_fit(self,
                  samples=1000,
                  overplot=None,
@@ -516,6 +548,7 @@ class InlaResult:
 
         # Extract the data from the dataframe.
         jds = np.array(self.input_df["Julian date"])
+        YYYYMMDDs = [jd2YYYYMMDD(jd) for jd in jds]
         dates = np.array([jd2date(jd) for jd in jds])
         counts = np.array(self.input_df["Count corrected [/day]"])
         duty_hours = np.array(self.input_df["Detection time [hours]"])
@@ -535,8 +568,10 @@ class InlaResult:
         if overplot!= None:
             for i, line in enumerate(overplot):
                 ax.plot(dates,line(dates),styles[i],lw=1,ms=0)
+        orbit_groups = [self.get_orbit_group(YMD) for YMD in YYYYMMDDs]
+        cnums = [f"C{orbit_group:02d}" for orbit_group in orbit_groups]
         ax.scatter(dates,counts/duty_hours*24,
-                   c="black", s=1,zorder=100)
+                   c=cnums, s=1,zorder=100)
         ax.errorbar(dates, counts/duty_hours*24,
                     err_plusminus_flux,
                     c="gray", lw=0, elinewidth=0.4,alpha=0.35,zorder=100)
@@ -547,7 +582,6 @@ class InlaResult:
         ax.tick_params(axis='x',which="minor",bottom=True,top=True)
         ax.tick_params(axis='x',labelrotation=60)
         ax.tick_params(labelsize="medium")
-        #ax.set_ylim(0,1400)
         ax.tick_params(labelleft=True,
                        labelright=True,
                        labelbottom = True,
@@ -593,6 +627,197 @@ class InlaResult:
         fig.tight_layout()
         fig.show()
 
+    def plot_counts_groups(self,
+                           aspect=0.75,
+                           samples=100):
+        """
+        Plot the observed detection count and the calculated rate for 
+        each of the orbit groups.
+
+        Parameters
+        ----------
+        aspect : float, optional
+            The aspect rate of the plot. The default is 1.
+        samples : int, optional
+            The number of samples to make up the plot of the possible rates. 
+            The default is 100.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        rate = self.rate_function() # This is correct,
+                                    # the rate_function
+                                    # returns a function.
+
+        # Extract the data from the dataframe.
+        jds = np.array(self.input_df["Julian date"])
+        YYYYMMDDs = [jd2YYYYMMDD(jd) for jd in jds]
+        heliocentric = np.array(self.input_df["Radial distance [au]"])
+        r = np.array(heliocentric)
+        counts = np.array(self.input_df["Count corrected [/day]"])
+        duty_hours = np.array(self.input_df["Detection time [hours]"])
+        orbit_groups = [self.get_orbit_group(YMD) for YMD in YYYYMMDDs]
+        cnums = [f"C{orbit_group:02d}" for orbit_group in orbit_groups]
+
+        # Calculate the errors.
+        err_plusminus_flux = self.get_errors(counts, duty_hours)
+
+        # Overplot the possibe rates.
+        sampled_posterior = self.sample(sample_size=samples)
+        v_sc_r = np.array(self.input_df['Radial velocity [km/s]'])
+        v_sc_t = np.array(self.input_df['Tangential velocity [km/s]'])
+        r_sc   = np.array(self.input_df['Radial distance [au]'])
+        v_sc_x = np.array(self.input_df['V_X (HAE) [km/s]'])
+        v_sc_y = np.array(self.input_df['V_Y (HAE) [km/s]'])
+        v_sc_z = np.array(self.input_df['V_Z (HAE) [km/s]'])
+        area_front = np.array(self.input_df["Area front [m^2]"])
+        area_side = np.array(self.input_df["Area side [m^2]"])
+
+        possible_rates = [rate(v_sc_r,v_sc_t,r_sc,v_sc_x,v_sc_y,v_sc_z,
+                               area_front,area_side,
+                               sampled_posterior[0,i],
+                               sampled_posterior[1,i],
+                               sampled_posterior[2,i],
+                               sampled_posterior[3,i],
+                               sampled_posterior[4,i],
+                               sampled_posterior[5,i],
+                               sampled_posterior[6,i],
+                               sampled_posterior[7,i])
+                          for i in range(samples)]
+
+        # plotting
+        fig = plt.figure(figsize=(aspect*0.666*len(set(cnums)),
+                                  0.666*len(set(cnums))))
+        gs = fig.add_gridspec(len(set(cnums)), hspace=.6)
+        ax = gs.subplots(sharex=1)
+        ax[len(ax)//2].set_ylabel("Impact rate (duty-cycle corrected) [$day^{-1}$]"
+                      , fontsize="medium")
+        ax[-1].set_xlabel("Heliocentric distance [$AU$]"
+                      , fontsize="medium")
+        ax[0].set_title("Fitted rate and detected count vs. heliocentric distance"
+                     , fontsize="medium", fontweight="bold")
+        for i, cnum in enumerate(sorted(set(cnums))):
+            mask = np.array(cnums) == np.array(len(cnums)*[cnum])
+
+            ax[i].tick_params(axis='y',which="minor",left=True,right=True)
+            ax[i].scatter(r[mask],
+                          counts[mask]/duty_hours[mask]*24,
+                          c=cnum, s=1, zorder=100)
+            ax[i].errorbar(r[mask],
+                           counts[mask]/duty_hours[mask]*24,
+                           err_plusminus_flux[:,mask],
+                           c=cnum, lw=0, elinewidth=0.4, alpha=0.2, zorder=100)
+            ax[i].set_xlim(left = 0, right = 1)
+            ax[i].tick_params(axis='x',which="minor",bottom=True,top=True)
+            ax[i].tick_params(axis='x',labelrotation=60)
+            ax[i].tick_params(labelsize="medium")
+            ax[i].tick_params(labelleft=True,
+                           labelright=True,
+                           labelbottom = False,
+                           labeltop = False)
+            for rates in possible_rates:
+                ax[i].plot(r[mask],24*rates[mask],c="red",alpha=0.02,lw=1)
+
+
+        ax[-1].tick_params(labelleft=True,
+                       labelright=True,
+                       labelbottom = True,
+                       labeltop = False)
+        fig.tight_layout()
+        fig.show()
+
+    def plot_counts_vs_rates(self,
+                             aspect=1.5,
+                             samples=100):
+        """
+        Compare the fitted rate to the actual detection counts. 
+
+        Parameters
+        ----------
+        aspect : float, optional
+            The aspect ratio of the plot. 
+            The default is 1.5.
+        samples : int, optional
+            The number of samples to draw the impact rate. 
+            The default is 100.
+
+        Returns
+        -------
+        None.
+
+        """
+        rate = self.rate_function() # This is correct,
+                                    # the rate_function
+                                    # returns a function.
+
+        # Extract the data from the dataframe.
+        jds = np.array(self.input_df["Julian date"])
+        YYYYMMDDs = [jd2YYYYMMDD(jd) for jd in jds]
+        dates = np.array([jd2date(jd) for jd in jds])
+        counts = np.array(self.input_df["Count corrected [/day]"])
+        duty_hours = np.array(self.input_df["Detection time [hours]"])
+        heliocentric = np.array(self.input_df["Radial distance [au]"])
+        r = np.array(heliocentric)
+
+        # Calculate the errors.
+        err_plusminus_flux = self.get_errors(counts, duty_hours)
+
+        # Create the plot.
+        fig, ax = plt.subplots(figsize=(3*aspect, 3))
+        ax.set_ylabel("Impact rate / impact count [$day^{-1}$]"
+                      , fontsize="medium")
+        ax.set_title('Dust Impacts: '+str(int(sum(counts)))
+                     , fontsize="medium", fontweight="bold")
+        ax.tick_params(axis='x',labeltop=False,labelbottom=True)
+        ax.tick_params(axis='y',labelleft=True,labelright=False)
+        ax.tick_params(axis='y',which="minor",left=True,right=False)
+
+        orbit_groups = [self.get_orbit_group(YMD) for YMD in YYYYMMDDs]
+        cnums = [f"C{orbit_group:02d}" for orbit_group in orbit_groups]
+
+        ax.set_xlim(left = 0, right = 1)
+        #ax.set_ylim(bottom = 0, top = 5)
+        ax.tick_params(axis='x',which="minor",bottom=True,top=True)
+        ax.tick_params(axis='x',labelrotation=60)
+        ax.tick_params(labelsize="medium")
+        ax.tick_params(labelleft=True,
+                       labelright=True,
+                       labelbottom = True,
+                       labeltop = False)
+        ax.set_yscale("log")
+
+        # Overplot the possibe rates.
+        sampled_posterior = self.sample(sample_size=samples)
+        v_sc_r = np.array(self.input_df['Radial velocity [km/s]'])
+        v_sc_t = np.array(self.input_df['Tangential velocity [km/s]'])
+        r_sc   = np.array(self.input_df['Radial distance [au]'])
+        v_sc_x = np.array(self.input_df['V_X (HAE) [km/s]'])
+        v_sc_y = np.array(self.input_df['V_Y (HAE) [km/s]'])
+        v_sc_z = np.array(self.input_df['V_Z (HAE) [km/s]'])
+        area_front = np.array(self.input_df["Area front [m^2]"])
+        area_side = np.array(self.input_df["Area side [m^2]"])
+
+        possible_rates = [rate(v_sc_r,v_sc_t,r_sc,v_sc_x,v_sc_y,v_sc_z,
+                               area_front,area_side,
+                               sampled_posterior[0,i],
+                               sampled_posterior[1,i],
+                               sampled_posterior[2,i],
+                               sampled_posterior[3,i],
+                               sampled_posterior[4,i],
+                               sampled_posterior[5,i],
+                               sampled_posterior[6,i],
+                               sampled_posterior[7,i])
+                          for i in range(samples)]
+
+        for rates in possible_rates:
+            ax.scatter(r,(counts/duty_hours)/rates,s=1,c=cnums,alpha=0.05)
+
+        fig.tight_layout()
+        fig.show()
+
 
 def list_datafiles(location=inla_results):
     datafiles = glob.glob(inla_results+"*.RData")
@@ -605,6 +830,8 @@ def main(file):
     result.summary_posterior()
     result.plot_prior_posterior()
     result.plot_fit()
+    result.plot_counts_groups()
+    result.plot_counts_vs_rates()
 
     return result
 
@@ -616,4 +843,6 @@ if __name__ == "__main__":
     files = ["sample_20240105144748_high_e_a_v.RData"]
 
     for file in files:
-        main('998_generated\\inla\\'+file)
+        #result = main('998_generated\\inla\\'+file)
+        result = InlaResult('998_generated\\inla\\'+file)
+        result.plot_counts_vs_rates()
