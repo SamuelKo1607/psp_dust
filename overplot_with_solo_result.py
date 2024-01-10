@@ -1,7 +1,9 @@
 import numpy as np
 from scipy import stats
 import matplotlib as mpl
+import matplotlib.pyplot as plt
 import pyreadr
+from tqdm.auto import tqdm
 
 from load_data import Observation
 from load_data import load_all_obs
@@ -49,17 +51,38 @@ def mu(b1, b2, c1, c2, v1, r, vr, vt):
 
 
 def read_legacy_inla_result(filename):
+    """
+    A container to read a file of interest and output its contents as arrays.
+
+    Parameters
+    ----------
+    filename : str
+        The file of interest (filepath).
+
+    Returns
+    -------
+    b1s : np.array of float
+        A legacy INLA hyperparameter.
+    b2s : TYPE
+        A legacy INLA hyperparameter.
+    c1s : TYPE
+        A legacy INLA hyperparameter.
+    c2s : TYPE
+        A legacy INLA hyperparameter.
+    v1s : TYPE
+        A legacy INLA hyperparameter.
+
+    """
     samples = pyreadr.read_r(filename)
-    b1s = np.array(samples["b1"])
-    b2s = np.array(samples["b2"])
-    c1s = np.array(samples["c1"])
-    c2s = np.array(samples["c2"])
-    v1s = np.array(samples["v1"])
+    b1s = np.array(samples["b1"]["b1"])
+    b2s = np.array(samples["b2"]["b2"])
+    c1s = np.array(samples["c1"]["c1"])
+    c2s = np.array(samples["c2"]["c2"])
+    v1s = np.array(samples["v1"]["v1"])
     return b1s, b2s, c1s, c2s, v1s
 
 
 def get_detection_errors(counts,
-                         duty_hours,
                          prob_coverage = 0.9):
     """
     The function to calculate the errorbars for flux 
@@ -70,15 +93,14 @@ def get_detection_errors(counts,
     ----------
     counts : array of float
         Counts per day.
-    duty_hours : array of float
-        Duty hours per day.
     prob_coverage : float, optional
         The coverage of the errobar interval. The default is 0.9.
 
     Returns
     -------
     err_plusminus_flux : np.array of float
-        The errorbars, lower and upper bound, shape (2, n).
+        The errorbars, lower and upper bound, shape (2, n). 
+        The unit is [1] (count).
 
     """
 
@@ -86,10 +108,10 @@ def get_detection_errors(counts,
                                           mu=counts)+counts
     counts_err_plus  = +stats.poisson.ppf(0.5+prob_coverage/2,
                                           mu=counts)-counts
-    err_plusminus_flux = np.array([counts_err_minus,
-                                   counts_err_plus]) / (duty_hours/(24))
+    err_plusminus_counts = np.array([counts_err_minus,
+                                   counts_err_plus])
 
-    return err_plusminus_flux
+    return err_plusminus_counts
 
 
 def get_poisson_sample(rate,
@@ -102,15 +124,16 @@ def get_poisson_sample(rate,
     ----------
     rate : float
         The rate as sampled from the INLA posterior and applying using mu().
+        The unit has to be [/h].
     duty_hours : float
-        The detection time.
+        The detection time [h].
     sample_size : int, optional
         The sample size, single rate. The default is 1000.
 
     Returns
     -------
-    rates : TYPE
-        DESCRIPTION.
+    rates : np.array of int
+        Sampled detection count.
 
     """
     rates = np.zeros(0)
@@ -126,53 +149,157 @@ def get_predicted_range(r, vr, vt, duty_hours,
                         sample_mu=100,
                         sample_poiss=100,
                         prob_coverage=0.9):
+    """
+    
 
+    Parameters
+    ----------
+    r : TYPE
+        DESCRIPTION.
+    vr : TYPE
+        DESCRIPTION.
+    vt : TYPE
+        DESCRIPTION.
+    duty_hours : TYPE
+        DESCRIPTION.
+    b1s : TYPE
+        DESCRIPTION.
+    b2s : TYPE
+        DESCRIPTION.
+    c1s : TYPE
+        DESCRIPTION.
+    c2s : TYPE
+        DESCRIPTION.
+    v1s : TYPE
+        DESCRIPTION.
+    sample_mu : TYPE, optional
+        DESCRIPTION. The default is 100.
+    sample_poiss : TYPE, optional
+        DESCRIPTION. The default is 100.
+    prob_coverage : TYPE, optional
+        DESCRIPTION. The default is 0.9.
+
+    Returns
+    -------
+    lower_expected_count : TYPE
+        DESCRIPTION.
+    upper_expected_count : TYPE
+        DESCRIPTION.
+    mean_expected_count : float
+        The mean expected count, assuming duty_hours of observation
+        and the hourly rate of mu.
+
+    """
     available_samples = len(b1s)
     sample_draw = np.random.choice(np.arange(available_samples),
                                    size = sample_mu)
     mus = [mu(b1s[i], b2s[i], c1s[i], c2s[i], v1s[i],
               r, vr, vt) for i in sample_draw]
-    sampled_rates = np.zeros(0)
-    for mu in mus:
-        some_rates = get_poisson_sample(mu,
-                                        duty_hours,
-                                        sample_size = sample_poiss)
-        sampled_rates = np.append(sampled_rates,some_rates)
+    sampled_counts = np.zeros(0)
+    for imu in mus:
+        some_counts = get_poisson_sample(imu,
+                                         duty_hours,
+                                         sample_size = sample_poiss)
+        sampled_counts = np.append(sampled_counts,some_counts)
 
-    lower_predicted = np.quantile(sampled_rates,(1-prob_coverage)/2)
-    upper_predicted = np.quantile(sampled_rates,1-(1-prob_coverage)/2)
+    lower_expected_count = np.quantile(sampled_counts,(1-prob_coverage)/2)
+    upper_expected_count = np.quantile(sampled_counts,1-(1-prob_coverage)/2)
+    mean_expected_count = np.mean(sampled_counts)
 
-    return lower_predicted, upper_predicted
+    return lower_expected_count, upper_expected_count, mean_expected_count
 
 
-def plot_psp_data_solo_model():
+def plot_psp_data_solo_model(model_prefact=1,
+                             aspect=1.5,
+                             sample_mu=10,
+                             sample_poiss=10,
+                             smooth_model=True):
 
     b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(legacy_inla_champion)
     psp_obs = load_all_obs(all_obs_location)
-    dates = [ob.date for ob in psp_obs]
+    psp_obs = [ob for ob in psp_obs if ob.heliocentric_distance > 0.25]
+    psp_obs = [ob for ob in psp_obs if ob.duty_hours > 4]
+    dates = np.array([ob.date for ob in psp_obs])
 
-    for i, date in enumerate(dates):
-        # get the scatter point
-        detected = psp_obs[i].count_corrected
+    fig, ax = plt.subplots(figsize=(3*aspect, 3))
+    ax.set_ylim(0,1000)#12000)
+    ax.set_ylabel("Rate [/24h equiv.]")
 
-        # get the scatter point's error
-        scatter_point_errors = get_detection_errors(detected,
-                                                    psp_obs[i].duty_hours)
+    # Calculate and plot the scatter plot
+    detecteds = np.array([ob.count_corrected for ob in psp_obs])
+    duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
+    ax.scatter(dates,detecteds/duty_dayss,
+               c="red",s=0.5,zorder=100,label="PSP detections")
 
-        # get the interval of modelled rate
-        lower_predicted, upper_predicted = get_predicted_range(
-            psp_obs[i].heliocentric_distance,
-            psp_obs[i].heliocentric_radial_speed,
-            psp_obs[i].heliocentric_tangential_speed,
-            psp_obs[i].duty_hours,
-            b1s, b2s, c1s, c2s, v1s)
+    # Calculate and plot  scatter points' errorbars
+    scatter_points_errors = get_detection_errors(detecteds)
+    ax.errorbar(dates, detecteds/duty_dayss,
+                scatter_points_errors/duty_dayss,
+                c="red", lw=0, elinewidth=0.4,alpha=0.)
 
-        #plot it
+    # Evaluate the model
+    lower_expected_counts = np.zeros(0)
+    upper_expected_counts = np.zeros(0)
+    mean_expected_counts = np.zeros(0)
+    for i in tqdm(range(len(dates))):
+        lower_e_count, upper_e_count, mean_e_count = get_predicted_range(
+            r = psp_obs[i].heliocentric_distance,
+            vr = psp_obs[i].heliocentric_radial_speed,
+            vt = psp_obs[i].heliocentric_tangential_speed,
+            duty_hours = psp_obs[i].duty_hours,
+            b1s = b1s, b2s = b2s, c1s = c1s, c2s = c2s, v1s = v1s,
+            sample_mu = sample_mu,
+            sample_poiss = sample_poiss)
+        lower_expected_counts = np.append(lower_expected_counts,
+                                          lower_e_count)
+        upper_expected_counts = np.append(upper_expected_counts,
+                                          upper_e_count)
+        mean_expected_counts = np.append(mean_expected_counts,
+                                         mean_e_count)
+
+    # Plot model line
+    if smooth_model:
+        mean_expected_counts = np.array(
+                               [mu(np.mean(b1s),
+                                   np.mean(b2s),
+                                   np.mean(c1s),
+                                   np.mean(c2s),
+                                   np.mean(v1s),
+                                   ob.heliocentric_distance,
+                                   ob.heliocentric_radial_speed,
+                                   ob.heliocentric_tangential_speed)
+                                for ob in psp_obs])*24*duty_dayss
+    ax.plot(dates,model_prefact*mean_expected_counts/duty_dayss,
+            c="blue",lw=0.5,zorder=101,label=f"{model_prefact}x SolO model")
 
 
+    # Plot model errorbars
+    ax.vlines(dates,
+              model_prefact*lower_expected_counts/duty_dayss,
+              model_prefact*upper_expected_counts/duty_dayss,
+              colors="blue", lw=0.4, alpha=0.)
+    ax.legend()
+    fig.show()
 
-    # as a scatterplot with poission errors and overplotted with red errorbar heads showing the predicted rate
-    pass
+    # Relate the counts and the prediction
+    preperi = np.array([ob.heliocentric_radial_speed < 0
+                        for ob in psp_obs])
+    postperi = np.invert(preperi)
+    fig, ax = plt.subplots(figsize=(3*aspect, 3))
+    ax.scatter(dates[preperi],
+               detecteds[preperi]
+               /(model_prefact*mean_expected_counts[preperi]),
+               s=0.5,c="green",label="Pre-perihelion")
+    ax.scatter(dates[postperi],
+               detecteds[postperi]
+               /(model_prefact*mean_expected_counts[postperi]),
+               s=0.5,c="coral",label="Post-perihelion")
+    ax.set_ylim(1e-2,1e2)
+    ax.set_yscale("log")
+    ax.set_ylabel("Detection / model [1]")
+    ax.legend()
+    fig.show()
 
-
-
+#%%
+if __name__ == "__main__":
+    plot_psp_data_solo_model()
