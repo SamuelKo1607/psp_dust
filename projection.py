@@ -7,13 +7,17 @@ from matplotlib import pyplot as plt
 mpl.rcParams['figure.dpi'] = 200
 
 from paths import psp_model_location
+from paths import solo_model_location
+from paths import solo_model_nopanels_location
+
 from paths import figures_location
 
-def psp_projection(elev=0,
+def psp_projection(file,
+                   elev=0,
                    azim=0,
                    roll=0,
                    show=False,
-                   dpi=2000,
+                   dpi=5000,
                    distinct_heat_shield=False):
     """
     A function for getting the projection area of PSP when seen 
@@ -47,7 +51,7 @@ def psp_projection(elev=0,
     ax.view_init(elev=elev, azim=azim, roll=roll)
 
     # Load the STL files and add the vectors to the plot
-    your_mesh = mesh.Mesh.from_file(psp_model_location)
+    your_mesh = mesh.Mesh.from_file(file)
     ax.add_collection3d(mplot3d.art3d.Poly3DCollection(your_mesh.vectors,
                                                        facecolors=r"#999999",
                                                        edgecolors="none",
@@ -97,6 +101,85 @@ def psp_projection(elev=0,
     return projection_area
 
 
+def illustrate_projections(psp_file,
+                           solo_file,
+                           axspan=7,
+                           save=False):
+
+
+    psp_mesh = mesh.Mesh.from_file(psp_file)
+    solo_mesh = mesh.Mesh.from_file(solo_file)
+
+    fig = plt.figure(figsize=(6, 4))
+    gs = fig.add_gridspec(nrows = 2, ncols = 3, hspace=.05, wspace=.05)
+    ax = gs.subplots(subplot_kw=dict(projection='3d'))
+
+    for a in ax.reshape(-1):
+        a.set_xlim(-axspan,axspan)
+        a.set_ylim(-axspan,axspan)
+        a.set_zlim(-axspan,axspan)
+        a.set_proj_type('ortho')
+        a.set_aspect('equal')
+        a.axis('off')
+
+
+    # PSP front
+    ax[0][0].set_title("PSP - frontal view")
+    ax[0][0].view_init(elev=0, azim=90, roll=0)
+    ax[0][0].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    # PSP side
+    ax[0][1].set_title("PSP - lateral view")
+    ax[0][1].view_init(elev=0, azim=00, roll=0)
+    ax[0][1].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    # PSP top
+    ax[0][2].set_title("PSP - top view")
+    ax[0][2].view_init(elev=90, azim=0, roll=0)
+    ax[0][2].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    # SolO front
+    ax[1][0].set_title("SolO - frontal view")
+    ax[1][0].view_init(elev=0, azim=0, roll=180)
+    ax[1][0].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    # SolO side
+    ax[1][1].set_title("SolO - lateral view")
+    ax[1][1].view_init(elev=180, azim=-90, roll=0)
+    ax[1][1].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    # SolO top
+    ax[1][2].set_title("SolO - top view")
+    ax[1][2].view_init(elev=90, azim=0, roll=90)
+    ax[1][2].add_collection3d(
+        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                       facecolors=r"#999999",
+                                       edgecolors="none",
+                                       antialiased=False))
+    if save:
+        fig.savefig(figures_location+"projections.png",dpi=1200)
+    fig.show()
+
+
 #%%
 if __name__ == "__main__":
-    print(psp_projection(20,60,0,1,distinct_heat_shield=True))
+    #print(psp_projection(solo_model_location,
+    #                    90,0,0,1,distinct_heat_shield=False))
+
+    illustrate_projections(psp_model_location,solo_model_location)
+

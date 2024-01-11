@@ -11,6 +11,8 @@ zero_time_csv = os.path.join("data_synced","")
 legacy_inla_champion = os.path.join("data_synced","champion.RData")
 
 psp_model_location = os.path.join("data_synced","parkersolarprobe.stl")
+solo_model_nopanels_location = os.path.join("data_synced","solarorbiter_nopanels.stl")
+solo_model_location = os.path.join("data_synced","solarorbiter.stl")
 
 if __name__ == "__main__":
     print("data paths in your system:")
