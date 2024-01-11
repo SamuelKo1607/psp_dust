@@ -209,31 +209,37 @@ def get_predicted_range(r, vr, vt, duty_hours,
     return lower_expected_count, upper_expected_count, mean_expected_count
 
 
-def plot_psp_data_solo_model(model_prefact=1,
+def plot_psp_data_solo_model(model_prefact=0.59,
                              aspect=1.5,
                              sample_mu=10,
                              sample_poiss=10,
-                             smooth_model=True):
+                             smooth_model=True,
+                             min_heliocentric_distance=0.,#25,
+                             min_duty_hours=2):
 
     b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(legacy_inla_champion)
     psp_obs = load_all_obs(all_obs_location)
-    psp_obs = [ob for ob in psp_obs if ob.heliocentric_distance > 0.25]
-    psp_obs = [ob for ob in psp_obs if ob.duty_hours > 4]
+    psp_obs = [ob for ob in psp_obs
+               if ob.heliocentric_distance > min_heliocentric_distance]
+    psp_obs = [ob for ob in psp_obs
+               if ob.duty_hours > min_duty_hours]
     dates = np.array([ob.date for ob in psp_obs])
 
-    fig, ax = plt.subplots(figsize=(3*aspect, 3))
-    ax.set_ylim(0,1000)#12000)
-    ax.set_ylabel("Rate [/24h equiv.]")
+    fig = plt.figure(figsize=(3*aspect, 3))
+    gs = fig.add_gridspec((2), hspace=.05)
+    ax = gs.subplots(sharex=1)
+    ax[0].set_ylim(0,1000)#12000)
+    ax[0].set_ylabel("Rate [/24h equiv.]")
 
     # Calculate and plot the scatter plot
     detecteds = np.array([ob.count_corrected for ob in psp_obs])
     duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
-    ax.scatter(dates,detecteds/duty_dayss,
+    ax[0].scatter(dates,detecteds/duty_dayss,
                c="red",s=0.5,zorder=100,label="PSP detections")
 
     # Calculate and plot  scatter points' errorbars
     scatter_points_errors = get_detection_errors(detecteds)
-    ax.errorbar(dates, detecteds/duty_dayss,
+    ax[0].errorbar(dates, detecteds/duty_dayss,
                 scatter_points_errors/duty_dayss,
                 c="red", lw=0, elinewidth=0.4,alpha=0.)
 
@@ -263,41 +269,44 @@ def plot_psp_data_solo_model(model_prefact=1,
                                [mu(np.mean(b1s),
                                    np.mean(b2s),
                                    np.mean(c1s),
-                                   np.mean(c2s),
+                                   0,#np.mean(c2s),
                                    np.mean(v1s),
                                    ob.heliocentric_distance,
                                    ob.heliocentric_radial_speed,
                                    ob.heliocentric_tangential_speed)
                                 for ob in psp_obs])*24*duty_dayss
-    ax.plot(dates,model_prefact*mean_expected_counts/duty_dayss,
+    ax[0].plot(dates,model_prefact*mean_expected_counts/duty_dayss,
             c="blue",lw=0.5,zorder=101,label=f"{model_prefact}x SolO model")
 
 
     # Plot model errorbars
-    ax.vlines(dates,
+    ax[0].vlines(dates,
               model_prefact*lower_expected_counts/duty_dayss,
               model_prefact*upper_expected_counts/duty_dayss,
               colors="blue", lw=0.4, alpha=0.)
-    ax.legend()
-    fig.show()
+    ax[0].legend(facecolor='white', framealpha=1,
+                 fontsize="x-small").set_zorder(200)
 
     # Relate the counts and the prediction
     preperi = np.array([ob.heliocentric_radial_speed < 0
                         for ob in psp_obs])
     postperi = np.invert(preperi)
-    fig, ax = plt.subplots(figsize=(3*aspect, 3))
-    ax.scatter(dates[preperi],
+    ax[1].scatter(dates[preperi],
                detecteds[preperi]
                /(model_prefact*mean_expected_counts[preperi]),
-               s=0.5,c="green",label="Pre-perihelion")
-    ax.scatter(dates[postperi],
+               s=0.5,c="firebrick",label="Pre-perihelion")
+    ax[1].scatter(dates[postperi],
                detecteds[postperi]
                /(model_prefact*mean_expected_counts[postperi]),
-               s=0.5,c="coral",label="Post-perihelion")
-    ax.set_ylim(1e-2,1e2)
-    ax.set_yscale("log")
-    ax.set_ylabel("Detection / model [1]")
-    ax.legend()
+               s=0.5,c="orangered",label="Post-perihelion")
+    ax[1].set_ylim(1.01e-2,9.9e1)
+    ax[1].set_yscale("log")
+    xlo,xhi = ax[1].get_xlim()
+    ax[1].hlines(1, xlo, xhi, colors="blue", lw=0.5)
+    ax[1].set_xlim(xlo,xhi)
+    ax[1].set_ylabel("Detection / model [1]")
+    ax[1].legend(facecolor='white', framealpha=1,
+                 fontsize="x-small").set_zorder(200)
     fig.show()
 
 #%%
