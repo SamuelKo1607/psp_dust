@@ -4,7 +4,9 @@ from mpl_toolkits import mplot3d
 import matplotlib as mpl
 from matplotlib import pyplot as plt
 
-mpl.rcParams['figure.dpi'] = 200
+import figure_standards as figstd
+axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
+mpl.rcParams['figure.dpi'] = 600
 
 from paths import psp_model_location
 from paths import solo_model_location
@@ -12,13 +14,13 @@ from paths import solo_model_nopanels_location
 
 from paths import figures_location
 
-def psp_projection(file,
-                   elev=0,
-                   azim=0,
-                   roll=0,
-                   show=False,
-                   dpi=5000,
-                   distinct_heat_shield=False):
+def projection(file,
+                elev=0,
+                azim=0,
+                roll=0,
+                show=False,
+                dpi=5000,
+                distinct_heat_shield=False):
     """
     A function for getting the projection area of PSP when seen 
     from an aribtrary angle.
@@ -92,7 +94,7 @@ def psp_projection(file,
     data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
     if show:
         plt.show()
-    #plt.close()
+    plt.close()
 
     # Count the PSP pixels.
     unique, counts = np.unique(data, return_counts=True)
@@ -103,10 +105,12 @@ def psp_projection(file,
 
 def illustrate_projections(psp_file,
                            solo_file,
+                           solo_file_nopanels,
                            axspan=7,
                            save=False):
 
-
+    tx, ty = 0.35, 0.75
+    txt = "${area:.2f} m^2$"
     psp_mesh = mesh.Mesh.from_file(psp_file)
     solo_mesh = mesh.Mesh.from_file(solo_file)
 
@@ -124,53 +128,95 @@ def illustrate_projections(psp_file,
 
 
     # PSP front
-    ax[0][0].set_title("PSP - frontal view")
-    ax[0][0].view_init(elev=0, azim=90, roll=0)
-    ax[0][0].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[0][0]
+    a.set_title("PSP - frontal view")
+    a.view_init(elev=0, azim=90, roll=0)
+    a.text2D(tx, ty, txt.format(area=projection(psp_file,
+                                                elev=0,
+                                                azim=90,
+                                                roll=0)),
+             transform=a.transAxes, va="center", ha="right")
+    a.text2D(tx, ty-0.1, "("+txt.format(area=projection(psp_file,
+                                                elev=0,
+                                                azim=90,
+                                                roll=0,
+                                                distinct_heat_shield=True
+                                                        ))+")",
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     # PSP side
-    ax[0][1].set_title("PSP - lateral view")
-    ax[0][1].view_init(elev=0, azim=00, roll=0)
-    ax[0][1].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[0][1]
+    a.set_title("PSP - lateral view")
+    a.view_init(elev=0, azim=0, roll=0)
+    a.text2D(tx, ty, txt.format(area=projection(psp_file,
+                                                elev=0,
+                                                azim=0,
+                                                roll=0)),
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     # PSP top
-    ax[0][2].set_title("PSP - top view")
-    ax[0][2].view_init(elev=90, azim=0, roll=0)
-    ax[0][2].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[0][2]
+    a.set_title("PSP - top view")
+    a.view_init(elev=90, azim=0, roll=0)
+    a.text2D(tx, ty, txt.format(area=projection(psp_file,
+                                                elev=90,
+                                                azim=0,
+                                                roll=0)),
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(psp_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     # SolO front
-    ax[1][0].set_title("SolO - frontal view")
-    ax[1][0].view_init(elev=0, azim=0, roll=180)
-    ax[1][0].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[1][0]
+    a.set_title("SolO - frontal view")
+    a.view_init(elev=0, azim=0, roll=180)
+    a.text2D(tx, ty, txt.format(area=projection(solo_file,
+                                                elev=0,
+                                                azim=0,
+                                                roll=180)),
+             transform=a.transAxes, va="center", ha="right")
+    a.text2D(tx, ty-0.1, "("+txt.format(area=projection(solo_file_nopanels,
+                                                elev=0,
+                                                azim=0,
+                                                roll=180))+")",
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     # SolO side
-    ax[1][1].set_title("SolO - lateral view")
-    ax[1][1].view_init(elev=180, azim=-90, roll=0)
-    ax[1][1].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[1][1]
+    a.set_title("SolO - lateral view")
+    a.view_init(elev=180, azim=-90, roll=0)
+    a.text2D(tx, ty, txt.format(area=projection(solo_file,
+                                                elev=180,
+                                                azim=-90,
+                                                roll=0)),
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     # SolO top
-    ax[1][2].set_title("SolO - top view")
-    ax[1][2].view_init(elev=90, azim=0, roll=90)
-    ax[1][2].add_collection3d(
-        mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
-                                       facecolors=r"#999999",
-                                       edgecolors="none",
-                                       antialiased=False))
+    a=ax[1][2]
+    a.set_title("SolO - top view")
+    a.view_init(elev=90, azim=0, roll=90)
+    a.text2D(tx, ty, txt.format(area=projection(solo_file,
+                                                elev=90,
+                                                azim=0,
+                                                roll=90)),
+             transform=a.transAxes, va="center", ha="right")
+    a.add_collection3d(mplot3d.art3d.Poly3DCollection(solo_mesh.vectors,
+                                                      facecolors=r"#999999",
+                                                      edgecolors="none",
+                                                      antialiased=False))
     if save:
         fig.savefig(figures_location+"projections.png",dpi=1200)
     fig.show()
@@ -181,5 +227,8 @@ if __name__ == "__main__":
     #print(psp_projection(solo_model_location,
     #                    90,0,0,1,distinct_heat_shield=False))
 
-    illustrate_projections(psp_model_location,solo_model_location)
+    illustrate_projections(psp_model_location,
+                           solo_model_location,
+                           solo_model_nopanels_location,
+                           save=True)
 
