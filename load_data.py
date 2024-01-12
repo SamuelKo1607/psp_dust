@@ -6,7 +6,6 @@ import datetime as dt
 import numpy as np
 from scipy import io
 
-from fetch_data import psp_dust_load
 from conversions import tt2000_to_date
 from conversions import tt2000_to_jd
 from ephemeris import get_state
@@ -14,6 +13,7 @@ from ephemeris import get_state
 from paths import l3_dust_location
 from paths import all_obs_location
 from paths import exposure_location
+from paths import dfb_location
 from paths import psp_ephemeris_file
 from paths import zero_time_csv
 from ephemeris import r_sun
@@ -219,7 +219,7 @@ def list_cdf(location=l3_dust_location):
         The available datafiles.
     """
 
-    files = glob.glob(os.path.join(l3_dust_location,"psp_fld_*.cdf"))
+    files = glob.glob(os.path.join(location,"psp_fld_*.cdf"))
     return files
 
 

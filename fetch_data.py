@@ -7,10 +7,12 @@ import numpy as np
 from conversions import date2YYYYMMDD
 
 from paths import l3_dust_location
-
+from paths import dfb_location
 
 def build_url(YYYYMMDD,
-              version="v01"):
+              version="v01",
+              product="dust",
+              hour=None):
     """
     A function to prepare the URL where the data file is found. 
     The URL goes like:  https://research.ssl.berkeley.edu/data/psp/data/
@@ -23,7 +25,13 @@ def build_url(YYYYMMDD,
         The date of interest.
     version : str, optional
         The suffix indicating the version. The default is "v01", which is 
-        sufficient as of 11/2023.
+        sufficient as of 11/2023 for dust, but we need "v02" for dfb.
+    product : str, optional
+        The nickname of the product requested, for now one of "dust" or 
+        "dfb_wf_vdc". Dhe default is "dust".
+    hour : str, optional
+        The hour of interest, needed for dfb products. Usually one of 
+        "00", "06", "12", "18". The default is None.
 
     Returns
     -------
@@ -36,14 +44,26 @@ def build_url(YYYYMMDD,
     """
     YYYY = YYYYMMDD[:4]
     MM = YYYYMMDD[4:6]
-    url = ("https://research.ssl.berkeley.edu/data/psp/data/sci/fields/l3/"
-        + f"dust/{YYYY}/{MM}/psp_fld_l3_dust_{YYYYMMDD}_{version}.cdf")
-    filename = url[url.find("psp_fld_l3_"):]
+    if product=="dust":
+        url = ("https://research.ssl.berkeley.edu/data/psp/data/sci/fields/l3/"
+            + f"dust/{YYYY}/{MM}/psp_fld_l3_dust_{YYYYMMDD}_{version}.cdf")
+    elif product=="dfb_wf_vdc":
+        if hour is None:
+            raise Exception(f"hour not provided")
+        url = ("https://research.ssl.berkeley.edu/data/psp/data/sci/fields/l2/"
+          + f"dfb_wf_vdc/{YYYY}/{MM}/"
+          + f"psp_fld_l2_dfb_wf_vdc_{YYYYMMDD}{hour}_{version}.cdf")
+    else:
+        raise Exception(f"an unknown data product: {product}")
+    filename = url[url.find("psp_fld_l"):]
     return url, filename
 
 
-def psp_dust_download(YYYYMMDD,
-                      target_folder=l3_dust_location):
+def fields_download(YYYYMMDD,
+                    target_folder=l3_dust_location,
+                    product="dust",
+                    version="v01",
+                    hour=None):
     """
     The function that downloads the .cdf L3 dust file for the requested date.
 
@@ -54,6 +74,15 @@ def psp_dust_download(YYYYMMDD,
     target_folder : str, optional
         The target folder for the download. 
         The default is l3_dust_location.
+    product : str, optional
+        The product nickname, passed down to build_url. The default is "dust"
+        for legacy reasons.
+    version : str, optional
+        The version of the product, passed down to build_url. The default 
+        is "v01" for legacy reasons.
+    hour : str, optional
+        The hour of interest, as in build_url, needed for dfb products. 
+        The default is None.
 
     Returns
     -------
@@ -66,8 +95,8 @@ def psp_dust_download(YYYYMMDD,
         In case the download failed. 
 
     """
-    url, filename = build_url(YYYYMMDD)
-    target = os.path.join(l3_dust_location,filename)
+    url, filename = build_url(YYYYMMDD,version,product,hour)
+    target = os.path.join(target_folder,filename)
 
     a = dt.datetime.now()
     r = requests.get(url, allow_redirects=True)
@@ -81,12 +110,15 @@ def psp_dust_download(YYYYMMDD,
     return target
 
 
-def psp_dust_fetch(YYYYMMDD,
-                   target_folder=l3_dust_location):
+def fields_fetch(YYYYMMDD,
+                 target_folder=l3_dust_location,
+                 product="dust",
+                 version="v01",
+                 hour=None):
     """
     The function to hand in a file for the requests date. If not present,
-    then calls psp_dust_download. Either returns the target file that 
-    can be reached or rasies an Exception through psp_dust_download.
+    then calls fields_download. Either returns the target file that 
+    can be reached or rasies an Exception through fields_download.
 
     Parameters
     ----------
@@ -95,6 +127,15 @@ def psp_dust_fetch(YYYYMMDD,
     target_folder : str, optional
         The target folder for the download. 
         The default is l3_dust_location.
+    product : str, optional
+        The product nickname, passed down to build_url. The default is "dust"
+        for legacy reasons.
+    version : str, optional
+        The version of the product, passed down to build_url. The default 
+        is "v01" for legacy reasons.
+    hour : str, optional
+        The hour of interest, as in build_url, needed for dfb products. 
+        The default is None.
 
     Returns
     -------
@@ -103,19 +144,22 @@ def psp_dust_fetch(YYYYMMDD,
 
     """
 
-    url, filename = build_url(YYYYMMDD)
-    target = os.path.join(l3_dust_location,filename)
+    url, filename = build_url(YYYYMMDD,version,product,hour)
+    target = os.path.join(target_folder,filename)
     try:
         f = open(target)
     except:
-        target = psp_dust_download(YYYYMMDD,target_folder)
+        target = fields_download(YYYYMMDD,target_folder,product,version,hour)
     else:
         f.close()
     return target
 
 
-def psp_dust_load(YYYYMMDD,
-                  target_folder=l3_dust_location):
+def fields_load(YYYYMMDD,
+                target_folder=l3_dust_location,
+                product="dust",
+                version="v01",
+                hour=None):
     """
     A wrapped to load the correct psp dust file as a cdf file using cdflib.
 
@@ -126,6 +170,15 @@ def psp_dust_load(YYYYMMDD,
     target_folder : str, optional
         The target folder for the download. 
         The default is l3_dust_location.
+    product : str, optional
+        The product nickname, passed down to build_url. The default is "dust"
+        for legacy reasons.
+    version : str, optional
+        The version of the product, passed down to build_url. The default 
+        is "v01" for legacy reasons.
+    hour : str, optional
+        The hour of interest, as in build_url, needed for dfb products. 
+        The default is None.
 
     Returns
     -------
@@ -133,7 +186,7 @@ def psp_dust_load(YYYYMMDD,
         The cdf datafile of interest.
 
     """
-    target = psp_dust_fetch(YYYYMMDD,l3_dust_location)
+    target = fields_fetch(YYYYMMDD,target_folder,product,version,hour)
     cdf_file = cdflib.CDF(target)
     return cdf_file
 
@@ -150,10 +203,23 @@ def get_list_of_days(date_min = dt.date(2018,10,2),
 
 
 #%%
+product = "dfb_wf_vdc" #"dust
+
 if __name__ == "__main__":
     for YYYYMMDD in get_list_of_days():
         try:
-            psp_dust_fetch(YYYYMMDD)
+            if product=="dust":
+                fields_fetch(YYYYMMDD)
+            elif product=="dfb_wf_vdc":
+                for hour in ["00","06","12","18"]:
+                    try:
+                        fields_fetch(YYYYMMDD,
+                                     target_folder=dfb_location,
+                                     product="dfb_wf_vdc",
+                                     version="v02",
+                                     hour=hour)
+                    except:
+                        pass
         except:
             pass
 
