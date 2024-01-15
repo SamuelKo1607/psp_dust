@@ -150,7 +150,8 @@ def get_predicted_range(r, vr, vt, duty_hours,
                         sample_poiss=100,
                         prob_coverage=0.9):
     """
-    
+    A function to asses the lo, mean and high expected counts 
+    given the covariates for a specific day. 
 
     Parameters
     ----------
@@ -181,10 +182,14 @@ def get_predicted_range(r, vr, vt, duty_hours,
 
     Returns
     -------
-    lower_expected_count : TYPE
-        DESCRIPTION.
-    upper_expected_count : TYPE
-        DESCRIPTION.
+    lower_expected_count : float
+        The low expected count, assuming duty_hours of observation
+        and the hourly rate of mu. Correspond to the quantile of 
+        (1-prob_coverage)/2.
+    upper_expected_count : float
+        The high expected count, assuming duty_hours of observation
+        and the hourly rate of mu. Correspond to the quantile of 
+        1-(1-prob_coverage)/2.
     mean_expected_count : float
         The mean expected count, assuming duty_hours of observation
         and the hourly rate of mu.
@@ -210,12 +215,47 @@ def get_predicted_range(r, vr, vt, duty_hours,
 
 
 def plot_psp_data_solo_model(model_prefact=0.59,
-                             aspect=1.5,
+                             aspect=1.2,
                              sample_mu=10,
                              sample_poiss=10,
                              smooth_model=True,
-                             min_heliocentric_distance=0.,#25,
-                             min_duty_hours=2):
+                             add_bg_term=True,
+                             min_heliocentric_distance=0.,
+                             min_duty_hours=2.):
+    """
+    A plot which shows how the old SolO model compares to PSP data. 
+
+    Parameters
+    ----------
+    model_prefact : float, optional
+        The multiplicative constant for the model line. The default is 0.59,
+        which corresponds to the ratio between PSP's front side projection 
+        area and SolO's front side projection area.
+    aspect : float, optional
+        The aspect ratio of the plot. The default is 1.2.
+    sample_mu : int, optional
+        Number of samples of the mean rate used to evaluate the fit lines. 
+        The default is 10.
+    sample_poiss : int, optional
+        Number of Poisson rate samples used to evaluate the fit lines. 
+        The default is 10.
+    smooth_model : bool, optional
+        Whether to show the idealized ratio rather than mean of sampled. 
+        The default is True.
+    add_bg_term : bool, optional
+        Whether to include the background term. The default is True.
+    min_heliocentric_distance : float, optional
+        The min heliocentric distance of the point in order for it to 
+        be shown [AU]. The default is 0..
+    min_duty_hours : float, optional
+        The minimum amount of time [hr] per interval needed for the point 
+        to be shown. The default is 2..
+
+    Returns
+    -------
+    None.
+
+    """
 
     b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(legacy_inla_champion)
     psp_obs = load_all_obs(all_obs_location)
@@ -225,23 +265,32 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                if ob.duty_hours > min_duty_hours]
     dates = np.array([ob.date for ob in psp_obs])
 
-    fig = plt.figure(figsize=(3*aspect, 3))
-    gs = fig.add_gridspec((2), hspace=.05)
-    ax = gs.subplots(sharex=1)
-    ax[0].set_ylim(0,1000)#12000)
-    ax[0].set_ylabel("Rate [/24h equiv.]")
+    # gridspec inside gridspec
+    fig = plt.figure(figsize=(4*aspect, 4))
+    gs0 = mpl.gridspec.GridSpec(2, 1,
+                                figure=fig, hspace=.0,  height_ratios=[1, 3])
+    gs1 = mpl.gridspec.GridSpecFromSubplotSpec(2, 1,
+                                               subplot_spec=gs0[1], hspace=.05)
+    ax = [fig.add_subplot(gs0[0]),
+          fig.add_subplot(gs1[0]),
+          fig.add_subplot(gs1[1])]
+
+    ax[1].set_ylabel("Rate [/24h equiv.]",horizontalalignment='center', y=0.9)
+
 
     # Calculate and plot the scatter plot
     detecteds = np.array([ob.count_corrected for ob in psp_obs])
     duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
-    ax[0].scatter(dates,detecteds/duty_dayss,
-               c="red",s=0.5,zorder=100,label="PSP detections")
+    for a in ax[0:2]:
+        a.scatter(dates,detecteds/duty_dayss,
+                  c="red",s=0.5,zorder=100,label="PSP detections")
 
     # Calculate and plot  scatter points' errorbars
     scatter_points_errors = get_detection_errors(detecteds)
-    ax[0].errorbar(dates, detecteds/duty_dayss,
-                scatter_points_errors/duty_dayss,
-                c="red", lw=0, elinewidth=0.4,alpha=0.)
+    for a in ax[0:2]:
+        a.errorbar(dates, detecteds/duty_dayss,
+                   scatter_points_errors/duty_dayss,
+                   c="red", lw=0, elinewidth=0.4,alpha=0.)
 
     # Evaluate the model
     lower_expected_counts = np.zeros(0)
@@ -269,46 +318,62 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                                [mu(np.mean(b1s),
                                    np.mean(b2s),
                                    np.mean(c1s),
-                                   0,#np.mean(c2s),
+                                   np.mean(c2s)*add_bg_term,
                                    np.mean(v1s),
                                    ob.heliocentric_distance,
                                    ob.heliocentric_radial_speed,
                                    ob.heliocentric_tangential_speed)
                                 for ob in psp_obs])*24*duty_dayss
-    ax[0].plot(dates,model_prefact*mean_expected_counts/duty_dayss,
-            c="blue",lw=0.5,zorder=101,label=f"{model_prefact}x SolO model")
-
+    for a in ax[0:2]:
+        a.plot(dates,model_prefact*mean_expected_counts/duty_dayss,
+               c="blue",lw=0.5,zorder=101,label=f"{model_prefact}x SolO model")
 
     # Plot model errorbars
-    ax[0].vlines(dates,
-              model_prefact*lower_expected_counts/duty_dayss,
-              model_prefact*upper_expected_counts/duty_dayss,
-              colors="blue", lw=0.4, alpha=0.)
+    for a in ax[0:2]:
+        a.vlines(dates,
+                 model_prefact*lower_expected_counts/duty_dayss,
+                 model_prefact*upper_expected_counts/duty_dayss,
+                 colors="blue", lw=0.4, alpha=0.)
     ax[0].legend(facecolor='white', framealpha=1,
-                 fontsize="x-small").set_zorder(200)
+             fontsize="small").set_zorder(200)
 
     # Relate the counts and the prediction
     preperi = np.array([ob.heliocentric_radial_speed < 0
                         for ob in psp_obs])
     postperi = np.invert(preperi)
-    ax[1].scatter(dates[preperi],
+    ax[2].scatter(dates[preperi],
                detecteds[preperi]
                /(model_prefact*mean_expected_counts[preperi]),
                s=0.5,c="firebrick",label="Pre-perihelion")
-    ax[1].scatter(dates[postperi],
+    ax[2].scatter(dates[postperi],
                detecteds[postperi]
                /(model_prefact*mean_expected_counts[postperi]),
                s=0.5,c="orangered",label="Post-perihelion")
-    ax[1].set_ylim(1.01e-2,9.9e1)
-    ax[1].set_yscale("log")
-    xlo,xhi = ax[1].get_xlim()
-    ax[1].hlines(1, xlo, xhi, colors="blue", lw=0.5)
-    ax[1].set_xlim(xlo,xhi)
-    ax[1].set_ylabel("Detection / model [1]")
-    ax[1].legend(facecolor='white', framealpha=1,
-                 fontsize="x-small").set_zorder(200)
+
+    ax[2].set_yscale("log")
+    xlo,xhi = ax[2].get_xlim()
+    ax[2].hlines(1, xlo, xhi, colors="blue", lw=0.5)
+    ax[2].set_xlim(xlo,xhi)
+    ax[2].set_ylabel("Detection / model")
+    ax[2].legend(facecolor='white', framealpha=1,
+                 fontsize="small").set_zorder(200)
+
+    # Plot the r<0.5AU region
+    inside_05 = np.array([ob.heliocentric_distance < 0.5 for ob in psp_obs])
+    for a in ax:
+        a.fill_between(dates, 0, 1e10*inside_05,
+                       lw=0, color="gray", alpha=0.2)
+
+    ax[0].spines['bottom'].set_visible(False)
+    ax[0].xaxis.tick_top()
+    ax[1].spines['top'].set_visible(False)
+    ax[1].xaxis.tick_bottom()
+    ax[0].set_ylim(1001,11000-1)
+    ax[1].set_ylim(0,1000)
+    ax[2].set_ylim(1.01e-2,3.3e2)
+
     fig.show()
 
 #%%
 if __name__ == "__main__":
-    plot_psp_data_solo_model()
+    plot_psp_data_solo_model(add_bg_term=True)
