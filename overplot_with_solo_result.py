@@ -17,7 +17,10 @@ mpl.rcParams['figure.dpi'] = 600
 
 
 
-def mu(b1, b2, c1, c2, v1, r, vr, vt):
+def mu(b1, b2, c1, c2, v1, r, vr, vt,
+       shield_compensation=None,
+       area_front=6.11,
+       area_side=4.62):
     """
     The legacy detection rate, as in A&A 2023. 
 
@@ -39,6 +42,16 @@ def mu(b1, b2, c1, c2, v1, r, vr, vt):
         SC radial velocity
     vt : float
         SC azimuthal velocity
+    shield_compensation : float, optional
+        Whether to account for a lower shield sensitivity. 
+        A float between 0 and 1, where 1 means the same 
+        sensitivity as the rest of the spacecraft.
+    area_front : float, optional
+        Front-side projection area of the spacecraft [m^2]. 
+        The default is 6.11, i.e. PSP forntal projection, shield included.
+    area_side : float
+        Lateral projection area of the spacecraft [m^2]. 
+        The default is 4.62, i.e. PSP lateral projection.
 
     Returns
     -------
@@ -46,8 +59,20 @@ def mu(b1, b2, c1, c2, v1, r, vr, vt):
         The predicted detection rate. The unit is [/h]. 
 
     """
-    rate = ( (((vr-v1)**2+(vt-(12*0.75/r))**2)**0.5)/50 )**(b1)*r**(b2)*c1 + c2
-    return rate
+    v_front = (v1-vr)
+    v_side = ((12*0.75/r)-vt)
+
+    rate = ( ((v_front**2+v_side**2)**0.5)/50 )**(b1)*r**(b2)*c1 + c2
+
+    if shield_compensation is None or v_front<0:
+        return rate
+    else:
+        area_coeff = ( np.abs(v_front)*area_front*shield_compensation +
+                       np.abs(v_side)*area_side
+                     ) / (
+                       np.abs(v_front)*area_front + np.abs(v_side)*area_side )
+
+        return rate*area_coeff
 
 
 def read_legacy_inla_result(filename):
@@ -146,6 +171,7 @@ def get_poisson_sample(rate,
 
 def get_predicted_range(r, vr, vt, duty_hours,
                         b1s, b2s, c1s, c2s, v1s,
+                        shield_compensation=None,
                         sample_mu=100,
                         sample_poiss=100,
                         prob_coverage=0.9):
@@ -173,6 +199,10 @@ def get_predicted_range(r, vr, vt, duty_hours,
         DESCRIPTION.
     v1s : TYPE
         DESCRIPTION.
+    shield_compensation : float, optional
+        Whether to account for a lower shield sensitivity. 
+        A float between 0 and 1, where 1 means the same 
+        sensitivity as the rest of the spacecraft.
     sample_mu : TYPE, optional
         DESCRIPTION. The default is 100.
     sample_poiss : TYPE, optional
@@ -199,7 +229,8 @@ def get_predicted_range(r, vr, vt, duty_hours,
     sample_draw = np.random.choice(np.arange(available_samples),
                                    size = sample_mu)
     mus = [mu(b1s[i], b2s[i], c1s[i], c2s[i], v1s[i],
-              r, vr, vt) for i in sample_draw]
+              r, vr, vt, shield_compensation=shield_compensation)
+           for i in sample_draw]
     sampled_counts = np.zeros(0)
     for imu in mus:
         some_counts = get_poisson_sample(imu,
@@ -220,6 +251,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              sample_poiss=10,
                              smooth_model=True,
                              add_bg_term=True,
+                             shield_compensation=None,
                              min_heliocentric_distance=0.,
                              min_duty_hours=2.):
     """
@@ -244,6 +276,10 @@ def plot_psp_data_solo_model(model_prefact=0.59,
         The default is True.
     add_bg_term : bool, optional
         Whether to include the background term. The default is True.
+    shield_compensation : float, optional
+        Whether to account for a lower shield sensitivity. 
+        A float between 0 and 1, where 1 means the same 
+        sensitivity as the rest of the spacecraft.
     min_heliocentric_distance : float, optional
         The min heliocentric distance of the point in order for it to 
         be shown [AU]. The default is 0..
@@ -322,7 +358,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                                    np.mean(v1s),
                                    ob.heliocentric_distance,
                                    ob.heliocentric_radial_speed,
-                                   ob.heliocentric_tangential_speed)
+                                   ob.heliocentric_tangential_speed,
+                                   shield_compensation=shield_compensation)
                                 for ob in psp_obs])*24*duty_dayss
     for a in ax[0:2]:
         a.plot(dates,model_prefact*mean_expected_counts/duty_dayss,
@@ -376,4 +413,6 @@ def plot_psp_data_solo_model(model_prefact=0.59,
 
 #%%
 if __name__ == "__main__":
-    plot_psp_data_solo_model(add_bg_term=True)
+    plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None)
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=None)
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5)
