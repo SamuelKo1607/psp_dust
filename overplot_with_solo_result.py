@@ -9,6 +9,7 @@ from load_data import Observation
 from load_data import load_all_obs
 from paths import all_obs_location
 from paths import legacy_inla_champion
+from paths import figures_location
 
 
 import figure_standards as figstd
@@ -253,7 +254,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              add_bg_term=True,
                              shield_compensation=None,
                              min_heliocentric_distance=0.,
-                             min_duty_hours=2.):
+                             min_duty_hours=2.,
+                             filename=None):
     """
     A plot which shows how the old SolO model compares to PSP data. 
 
@@ -286,6 +288,9 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     min_duty_hours : float, optional
         The minimum amount of time [hr] per interval needed for the point 
         to be shown. The default is 2..
+    filename : str, optional
+        The filename of the .png to be saved. the default is None, in which
+        case, the plot is not saved.
 
     Returns
     -------
@@ -390,29 +395,37 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     ax[2].set_yscale("log")
     xlo,xhi = ax[2].get_xlim()
     ax[2].hlines(1, xlo, xhi, colors="blue", lw=0.5)
-    ax[2].set_xlim(xlo,xhi)
     ax[2].set_ylabel("Detection / model")
     ax[2].legend(facecolor='white', framealpha=1,
                  fontsize="small").set_zorder(200)
 
+    ax[0].spines['bottom'].set_visible(False)
+    ax[0].xaxis.tick_top()
+    ax[0].xaxis.set_ticklabels([])
+    ax[1].hlines(1e3, xlo, xhi, colors="gray", lw=0.5, ls="dashed")
+    ax[1].spines['top'].set_visible(False)
+    ax[1].xaxis.tick_bottom()
+    ax[0].set_ylim(1001,11000-1)
+    ax[1].set_ylim(0,1001)
+    ax[1].minorticks_off()
+    ax[2].set_ylim(1.01e-2,3.3e2)
     # Plot the r<0.5AU region
     inside_05 = np.array([ob.heliocentric_distance < 0.5 for ob in psp_obs])
     for a in ax:
         a.fill_between(dates, 0, 1e10*inside_05,
                        lw=0, color="gray", alpha=0.2)
+        a.set_xlim(xlo,xhi)
 
-    ax[0].spines['bottom'].set_visible(False)
-    ax[0].xaxis.tick_top()
-    ax[1].spines['top'].set_visible(False)
-    ax[1].xaxis.tick_bottom()
-    ax[0].set_ylim(1001,11000-1)
-    ax[1].set_ylim(0,1000)
-    ax[2].set_ylim(1.01e-2,3.3e2)
+    if filename is not None:
+        fig.savefig(figures_location+filename+".png",dpi=1200)
 
     fig.show()
 
 #%%
 if __name__ == "__main__":
-    plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None)
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=None)
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5)
+    plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
+                             filename="PSP_SolO_with_bg_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=None,
+                             filename="PSP_SolO_without_bg_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5,
+                             filename="PSP_SolO_shield_coeff_v2")
