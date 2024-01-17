@@ -18,8 +18,11 @@ mpl.rcParams['figure.dpi'] = 600
 
 
 
-def mu(b1, b2, c1, c2, v1, r, vr, vt,
+def mu(b1, b2, c1, c2, v1,
+       r, vr, vt,
+       add_bound=None,
        shield_compensation=None,
+       bound_r_exponent=-1.3,
        area_front=6.11,
        area_side=4.62):
     """
@@ -37,6 +40,9 @@ def mu(b1, b2, c1, c2, v1, r, vr, vt,
         constant, background rate
     v1 : float
         the mean dust radial speed
+    add_bound : float, optional
+        The additional rate [/h] of bound dust, normalized to the flux at 1AU.
+        The default is None, in which case, no bound dust is added.
     r : float
         SC heliocentric distance
     vr : float
@@ -60,20 +66,42 @@ def mu(b1, b2, c1, c2, v1, r, vr, vt,
         The predicted detection rate. The unit is [/h]. 
 
     """
-    v_front = (v1-vr)
-    v_side = ((12*0.75/r)-vt)
+    # beta
+    v_front_beta = (v1-vr)
+    v_side_beta = ((12*0.75/r)-vt)
+    rate_beta = (
+                    ((v_front_beta**2+v_side_beta**2)**0.5)/50
+                )**(b1)*r**(b2)*c1 + c2
 
-    rate = ( ((v_front**2+v_side**2)**0.5)/50 )**(b1)*r**(b2)*c1 + c2
-
-    if shield_compensation is None or v_front<0:
-        return rate
+    if shield_compensation is None or v_front_beta<0:
+        pass
     else:
-        area_coeff = ( np.abs(v_front)*area_front*shield_compensation +
-                       np.abs(v_side)*area_side
-                     ) / (
-                       np.abs(v_front)*area_front + np.abs(v_side)*area_side )
+        area_coeff = ( np.abs(v_front_beta)*area_front*shield_compensation +
+                       np.abs(v_side_beta)*area_side
+                     ) / ( np.abs(v_front_beta)*area_front
+                           + np.abs(v_side_beta)*area_side )
+        rate_beta *= area_coeff
 
-        return rate*area_coeff
+    # bound
+    if add_bound is None:
+        rate_bound = 0
+    else:
+        v_front_bound = -vr
+        v_side_bound = ((29.8/r)-vt)
+        rate_bound = (
+                        ((v_front_bound**2+v_side_bound**2)**0.5)/50
+                    )**(b1)*r**(bound_r_exponent)*add_bound
+        if shield_compensation is None or v_front_bound<0:
+            pass
+        else:
+            area_coeff = ( np.abs(v_front_bound)*area_front*shield_compensation
+                           + np.abs(v_side_bound)*area_side
+                         ) / ( np.abs(v_front_bound)*area_front
+                               + np.abs(v_side_bound)*area_side )
+            rate_bound *= area_coeff
+
+    rate = rate_beta + rate_bound
+    return rate
 
 
 def read_legacy_inla_result(filename):
@@ -172,6 +200,7 @@ def get_poisson_sample(rate,
 
 def get_predicted_range(r, vr, vt, duty_hours,
                         b1s, b2s, c1s, c2s, v1s,
+                        add_bound=None,
                         shield_compensation=None,
                         sample_mu=100,
                         sample_poiss=100,
@@ -200,6 +229,9 @@ def get_predicted_range(r, vr, vt, duty_hours,
         DESCRIPTION.
     v1s : TYPE
         DESCRIPTION.
+    add_bound : float, optional
+        The additional rate [/h] of bound dust, normalized to the flux at 1AU.
+        The default is None, in which case, no bound dust is added.
     shield_compensation : float, optional
         Whether to account for a lower shield sensitivity. 
         A float between 0 and 1, where 1 means the same 
@@ -230,7 +262,9 @@ def get_predicted_range(r, vr, vt, duty_hours,
     sample_draw = np.random.choice(np.arange(available_samples),
                                    size = sample_mu)
     mus = [mu(b1s[i], b2s[i], c1s[i], c2s[i], v1s[i],
-              r, vr, vt, shield_compensation=shield_compensation)
+              r, vr, vt,
+              add_bound = add_bound,
+              shield_compensation = shield_compensation)
            for i in sample_draw]
     sampled_counts = np.zeros(0)
     for imu in mus:
@@ -250,6 +284,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              aspect=1.2,
                              sample_mu=10,
                              sample_poiss=10,
+                             add_bound=None,
                              smooth_model=True,
                              add_bg_term=True,
                              shield_compensation=None,
@@ -273,6 +308,9 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     sample_poiss : int, optional
         Number of Poisson rate samples used to evaluate the fit lines. 
         The default is 10.
+    add_bound : float, optional
+        The additional rate [/h] of bound dust, normalized to the flux at 1AU.
+        The default is None, in which case, no bound dust is added.
     smooth_model : bool, optional
         Whether to show the idealized ratio rather than mean of sampled. 
         The default is True.
@@ -344,6 +382,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
             vt = psp_obs[i].heliocentric_tangential_speed,
             duty_hours = psp_obs[i].duty_hours,
             b1s = b1s, b2s = b2s, c1s = c1s, c2s = c2s, v1s = v1s,
+            add_bound = add_bound,
             sample_mu = sample_mu,
             sample_poiss = sample_poiss)
         lower_expected_counts = np.append(lower_expected_counts,
@@ -364,6 +403,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                                    ob.heliocentric_distance,
                                    ob.heliocentric_radial_speed,
                                    ob.heliocentric_tangential_speed,
+                                   add_bound,
                                    shield_compensation=shield_compensation)
                                 for ob in psp_obs])*24*duty_dayss
     for a in ax[0:2]:
@@ -405,7 +445,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     ax[1].hlines(1e3, xlo, xhi, colors="gray", lw=0.5, ls="dashed")
     ax[1].spines['top'].set_visible(False)
     ax[1].xaxis.tick_bottom()
-    ax[0].set_ylim(1001,11000-1)
+    ax[0].set_ylim(1001,13000-1)
     ax[1].set_ylim(0,1001)
     ax[1].minorticks_off()
     ax[2].set_ylim(1.01e-2,3.3e2)
@@ -429,3 +469,7 @@ if __name__ == "__main__":
                              filename="PSP_SolO_without_bg_v2")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5,
                              filename="PSP_SolO_shield_coeff_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
+                             add_bound=2.5,
+                             filename="PSP_SolO_shield_coeff_bound_v2")
+
