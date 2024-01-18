@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import pyreadr
 from tqdm.auto import tqdm
 import unittest
+import datetime as dt
+import pickle
 
 from load_data import Observation
 from load_data import load_all_obs
@@ -12,6 +14,7 @@ from overplot_with_solo_result import read_legacy_inla_result
 from paths import all_obs_location
 from paths import legacy_inla_champion
 from paths import figures_location
+from paths import grid_fiting_results
 
 
 import figure_standards as figstd
@@ -270,32 +273,35 @@ def loglik(b1, b2, c1, c2, v1,
            c3=2.5):
 
     logliks = []
+    accepted = []
     for i in range(len(b1)):
         mus = mu_vectorized(b1[i], b2[i], c1[i], c2[i], v1[i], r, vr, vt,
                             shield_compensation=shield_compensation,
                             c3=c3)
     
-        lower_reasonable, upper_reasonable = get_poisson_range(mus,duty_hours)
-        mask_low_enough = detected<upper_reasonable
-        mask_high_enough = detected>lower_reasonable
+        lower_reason, upper_reason = get_poisson_range(mus,
+                                                       duty_hours,
+                                                       prob_coverage=0.99)
+        mask_low_enough = detected<upper_reason
+        mask_high_enough = detected>lower_reason
         mask = mask_low_enough * mask_high_enough
     
         reasonable_mus = mus[mask]
         reasonable_duty_hours = duty_hours[mask]
         reasonable_detected = detected[mask]
 
-        table = np.log10(get_poisson_rate(reasonable_mus,
-                                          reasonable_duty_hours))
-        sliced = table[np.arange(np.shape(table)[0]),
-                       reasonable_detected]
+        table = get_poisson_rate(reasonable_mus,reasonable_duty_hours)
+        sliced = np.log10(table[np.arange(np.shape(table)[0]),
+                                reasonable_detected])
         logliks.append(np.mean(sliced))
+        accepted.append(sum(mask))
 
-    return np.mean(logliks)
+    return np.mean(logliks), np.mean(accepted)
 
 
-#%%
-if __name__ == "__main__":
-    unittest.main()
+def main(shield_corrections=np.linspace(0.1,0.5,30),
+         c3s=np.linspace(0,5,30),
+         plot=False):
 
     b1, b2, c1, c2, v1 = get_legacy_post_sample()
 
@@ -308,19 +314,65 @@ if __name__ == "__main__":
     duty_hours = np.array([ob.duty_hours for ob in psp_obs])
     detected = np.array([int(ob.count_corrected) for ob in psp_obs])
 
+    shield_corrections = shield_corrections
+    c3s = c3s
+    logliks = np.zeros((len(shield_corrections),len(c3s)),dtype=float)
+    acceptables = np.zeros((len(shield_corrections),len(c3s)),dtype=float)
+    for i, sc in enumerate(shield_corrections):
+        for j, c3 in enumerate(c3s):
+            iloglik, iacceptable = loglik(b1, b2, c1, c2, v1,
+                                          r, vr, vt, duty_hours, detected,
+                                          shield_compensation=sc,
+                                          c3=c3)
+            logliks[i,j] = iloglik
+            acceptables[i,j] = iacceptable
+            print(dt.datetime.now())
+            print(logliks[i,j],acceptables[i,j])
 
-    print(loglik(b1, b2, c1, c2, v1, r, vr, vt, duty_hours, detected,
-           shield_compensation=0.3,
-           c3=2.5))
+    if plot:
+        fig, ax = plt.subplots()
+        lik = ax.contour(shield_corrections,c3s,
+                         logliks.transpose())
+        ax.clabel(lik, inline=True, fontsize=10)
+        ax.set_title('logliks')
+        ax.set_xlabel("shield correction")
+        ax.set_ylabel("bound dust flux")
+        fig.show()
+    
+        fig, ax = plt.subplots()
+        lik = ax.contour(shield_corrections,c3s,
+                         acceptables.transpose())
+        ax.clabel(lik, inline=True, fontsize=10)
+        ax.set_title('acceptable')
+        ax.set_xlabel("shield correction")
+        ax.set_ylabel("bound dust flux")
+        fig.show()
 
-    print(loglik(b1, b2, c1, c2, v1, r, vr, vt, duty_hours, detected,
-           shield_compensation=0.3,
-           c3=2))
+    data = [shield_corrections,
+            c3s,
+            logliks,
+            acceptables]
+    timestamp = dt.datetime.now().strftime("%Y%m%d%H%M%S")
+    with open(grid_fiting_results+f"fit_{timestamp}.dat", "wb") as f:
+        pickle.dump(data, f)
 
 
 
 
+#%%
+if __name__ == "__main__":
+    unittest.main()
 
+    main(shield_corrections=np.linspace(0.05,0.25,5),
+         c3s=np.linspace(0.5,1.5,5),
+         plot=True)
+
+    # with open(grid_fiting_results+filename, "rb") as f:
+    #     data = pickle.load(f)
+    #     shield_corrections = data[0]
+    #     c3s = data[1]
+    #     logliks = data[2]
+    #     acceptables = data[3]
 
 
 
