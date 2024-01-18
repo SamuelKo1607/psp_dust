@@ -472,4 +472,7 @@ if __name__ == "__main__":
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
                              add_bound=2.5,
                              filename="PSP_SolO_shield_coeff_bound_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.18276,
+                             add_bound=0.86207,
+                             filename="PSP_SolO_shield_coeff_bound_v2_fit")
 
