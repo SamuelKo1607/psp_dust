@@ -859,6 +859,6 @@ if __name__ == "__main__":
              "sample_20240109105421_only_beta_fix_solo.RData"]
 
     for file in files:
-        result = main('998_generated\\inla\\'+file)
+        result = main(inla_results+file)
         #result = InlaResult('998_generated\\inla\\'+file)
         #result.plot_counts_vs_rates()
