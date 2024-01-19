@@ -2,6 +2,7 @@ import numpy as np
 from scipy import stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import pyreadr
 from tqdm.auto import tqdm
 
@@ -102,6 +103,50 @@ def mu(b1, b2, c1, c2, v1,
 
     rate = rate_beta + rate_bound
     return rate
+
+
+def get_poisson_range(mus,
+                      duty_hours,
+                      prob_coverage=0.9999):
+    """
+    To make the fitting robus, we need to include only reasonable points. 
+    Here we evalueate the range of reasonable points for the given rates.
+
+    Parameters
+    ----------
+    mus : np.array of float
+        the vector of rates [/h] as computed by mu().
+    duty_hours : np.array of float
+        the vector of exposures [h], the same length as mus.
+    prob_coverage : float, optional
+        The acceptable range for a value. 1 mieans that all are included,
+        0.9 means that only the ones tha fall within 90% of the 
+        most likely results are included. The default is 0.9999.
+
+    Raises
+    ------
+    Exception
+        If the input vectors differ in length.
+
+    Returns
+    -------
+    lower_boundaries : np.array of float
+        The lowest acceptable counts, given the rates.
+    upper_boundaries : np.array of float
+        The highest acceptable counts, given the rates.
+
+    """
+
+    if len(mus)!=len(duty_hours):
+        raise Exception("len(mus)!=len(duty_hours):"
+                        +f" {len(mus)} vs {len(duty_hours)}")
+
+    lower_boundaries = stats.poisson.ppf(0.5-prob_coverage/2,
+                                         mu=mus*duty_hours)
+    upper_boundaries = stats.poisson.ppf(0.5+prob_coverage/2,
+                                         mu=mus*duty_hours)
+
+    return lower_boundaries, upper_boundaries
 
 
 def read_legacy_inla_result(filename):
@@ -290,6 +335,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              shield_compensation=None,
                              min_heliocentric_distance=0.,
                              min_duty_hours=2.,
+                             prob_coverage=0.9999,
                              filename=None):
     """
     A plot which shows how the old SolO model compares to PSP data. 
@@ -326,6 +372,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     min_duty_hours : float, optional
         The minimum amount of time [hr] per interval needed for the point 
         to be shown. The default is 2..
+    prob_coverage : float, optional
+        The threshold for outliers. The default is 0.9999.
     filename : str, optional
         The filename of the .png to be saved. the default is None, in which
         case, the plot is not saved.
@@ -356,21 +404,6 @@ def plot_psp_data_solo_model(model_prefact=0.59,
 
     ax[1].set_ylabel("Rate [/24h equiv.]",horizontalalignment='center', y=0.9)
 
-
-    # Calculate and plot the scatter plot
-    detecteds = np.array([ob.count_corrected for ob in psp_obs])
-    duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
-    for a in ax[0:2]:
-        a.scatter(dates,detecteds/duty_dayss,
-                  c="red",s=0.5,zorder=100,label="PSP detections")
-
-    # Calculate and plot  scatter points' errorbars
-    scatter_points_errors = get_detection_errors(detecteds)
-    for a in ax[0:2]:
-        a.errorbar(dates, detecteds/duty_dayss,
-                   scatter_points_errors/duty_dayss,
-                   c="red", lw=0, elinewidth=0.4,alpha=0.)
-
     # Evaluate the model
     lower_expected_counts = np.zeros(0)
     upper_expected_counts = np.zeros(0)
@@ -391,24 +424,47 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                                           upper_e_count)
         mean_expected_counts = np.append(mean_expected_counts,
                                          mean_e_count)
+    mus = np.array([mu(np.mean(b1s),
+                       np.mean(b2s),
+                       np.mean(c1s),
+                       np.mean(c2s)*add_bg_term,
+                       np.mean(v1s),
+                       ob.heliocentric_distance,
+                       ob.heliocentric_radial_speed,
+                       ob.heliocentric_tangential_speed,
+                       add_bound,
+                       shield_compensation=shield_compensation)
+                    for ob in psp_obs])*model_prefact
+
+    # Calculate and plot the scatter plot
+    detecteds = np.array([ob.count_corrected for ob in psp_obs])
+    duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
+    for a in ax[0:2]:
+        lower_ok, upper_ok = get_poisson_range(mus,
+                                               duty_dayss*24,
+                                               prob_coverage=prob_coverage)
+        outlier = (detecteds>upper_ok) + (detecteds>upper_ok)
+        inlier = (1-outlier).astype(bool)
+        a.scatter(dates[inlier],detecteds[inlier]/duty_dayss[inlier],
+                  c="red",s=0.5,zorder=100,label="PSP detections")
+        a.scatter(dates[outlier],detecteds[outlier]/duty_dayss[outlier],
+                  c="limegreen",s=1,zorder=102,
+                  label=f"{sum(outlier)} outliers")
+
+    # Calculate and plot scatter points' errorbars
+    scatter_points_errors = get_detection_errors(detecteds)
+    for a in ax[0:2]:
+        a.errorbar(dates, detecteds/duty_dayss,
+                   scatter_points_errors/duty_dayss,
+                   c="red", lw=0, elinewidth=0.4,alpha=0.)
 
     # Plot model line
     if smooth_model:
-        mean_expected_counts = np.array(
-                               [mu(np.mean(b1s),
-                                   np.mean(b2s),
-                                   np.mean(c1s),
-                                   np.mean(c2s)*add_bg_term,
-                                   np.mean(v1s),
-                                   ob.heliocentric_distance,
-                                   ob.heliocentric_radial_speed,
-                                   ob.heliocentric_tangential_speed,
-                                   add_bound,
-                                   shield_compensation=shield_compensation)
-                                for ob in psp_obs])*24*duty_dayss
+        mean_expected_counts = mus*24*duty_dayss
     for a in ax[0:2]:
-        a.plot(dates,model_prefact*mean_expected_counts/duty_dayss,
-               c="blue",lw=0.5,zorder=101,label=f"{model_prefact}x SolO model")
+        a.plot(dates,mean_expected_counts/duty_dayss,
+               c="blue",lw=0.5,zorder=101,
+               label=f"{model_prefact}x SolO model")
 
     # Plot model errorbars
     for a in ax[0:2]:
@@ -416,6 +472,9 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                  model_prefact*lower_expected_counts/duty_dayss,
                  model_prefact*upper_expected_counts/duty_dayss,
                  colors="blue", lw=0.4, alpha=0.)
+
+
+
     ax[0].legend(facecolor='white', framealpha=1,
              fontsize="small").set_zorder(200)
 
@@ -425,11 +484,11 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     postperi = np.invert(preperi)
     ax[2].scatter(dates[preperi],
                detecteds[preperi]
-               /(model_prefact*mean_expected_counts[preperi]),
+               /(mean_expected_counts[preperi]),
                s=0.5,c="firebrick",label="Pre-perihelion")
     ax[2].scatter(dates[postperi],
                detecteds[postperi]
-               /(model_prefact*mean_expected_counts[postperi]),
+               /(mean_expected_counts[postperi]),
                s=0.5,c="orangered",label="Post-perihelion")
 
     ax[2].set_yscale("log")
@@ -471,8 +530,11 @@ if __name__ == "__main__":
                              filename="PSP_SolO_shield_coeff_v2")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
                              add_bound=2.5,
-                             filename="PSP_SolO_shield_coeff_bound_v2")
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.18276,
-                             add_bound=0.86207,
-                             filename="PSP_SolO_shield_coeff_bound_v2_fit")
+                             filename="PSP_SolO_shield_coeff_bound_found_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.335,
+                             add_bound=2.295,
+                             filename="PSP_SolO_shield_coeff_bound_fitted_v2")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.47,
+                             add_bound=0.54,
+                             filename="PSP_SolO_shield_coeff_bound_inla_v2")
 
