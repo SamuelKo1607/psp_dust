@@ -58,8 +58,8 @@ def make_flux_to_fit_inla(observations,
                              str(obs.velocity_HAE_y),
                              str(obs.velocity_HAE_z),
                              #TBD function from projection.py?
-                             6.12,
-                             4.63])
+                             6.11,
+                             4.62])
 
 
 
