@@ -31,7 +31,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a,   shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_a,   shape = 2,    scale = 2, log=TRUE))
   }
   prior.shield_sens <- function(shield_sens=feed_x){
     return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
@@ -41,11 +41,8 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                    v_sc_r = feed_c[1], 
                    v_sc_t = feed_c[2], 
                    r_sc =   feed_c[3], 
-                   v_sc_x = feed_c[4], 
-                   v_sc_y = feed_c[5], 
-                   v_sc_z = feed_c[6], 
-                   area_front = feed_c[7],
-                   area_side =  feed_c[8],
+                   area_front = feed_c[4],
+                   area_side =  feed_c[5],
                    #hyperparam
                    l_a =         feed_h[1], 
                    shield_sens = feed_h[2],
@@ -59,6 +56,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                    e_b_r=-1.61,
                    l_b=1.96,
                    l_bg=0,
+                   old_model_prefactor=0.59,
                    #stationary Earth
                    v_earth_a=0){            
     
@@ -68,53 +66,44 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     }
 
     #beta meteoroid contribution, old SolO model
-    L_b_raw = ( (((v_sc_r-v_b_r)**2+
-                  (v_sc_t-(v_b_a/r_sc))**2)**0.5)
-                /50 )**(e_b_v)*r_sc**(e_b_r)*l_b + l_bg
+    v_front_beta = -1*(v_sc_r-v_b_r) 
+    #positive is on the heatshield, negative on the tail
+    v_side_beta = abs(v_sc_t-(v_b_a/r_sc))
+    #always positive, RHS vs LHS plays no role
     
-    radial_impact_velocity = -1*(v_sc_r-v_b_r) 
-      #positive is on the heatshield, negative on the tail
-    azimuthal_impact_velocity = abs(v_sc_t-(v_b_a/r_sc))
-      #always positive, RHS vs LHS plays no role
-    impact_angle = atan( azimuthal_impact_velocity / radial_impact_velocity )
+    L_b_raw = ( (((v_front_beta)^2+
+                  (v_side_beta)^2)^0.5)
+                /50 )^(e_b_v)*r_sc^(e_b_r)*l_b + l_bg
     
-    frontside = radial_impact_velocity > 0
-    backside = (frontside != TRUE)
-    area = (   frontside * shield_sens * area_front * cos(impact_angle) 
-               + backside  * 1           * area_front * cos(impact_angle) 
-               + area_side * sin(abs(impact_angle)) )
-    
-    L_b = L_b_raw * area / 3600 # to get to [sec^-1]
+    area_coeff <- ifelse(v_front_beta > 0,
+                         (abs(v_front_beta) * area_front * shield_sens 
+                          + abs(v_side_beta) * area_side) /
+                           (abs(v_front_beta) * area_front 
+                            + abs(v_side_beta) * area_side),
+                         1)
+
+    L_b = L_b_raw * area_coeff * old_model_prefactor  # [hour^-1]
     
     #bound dust contribution
-    ksi = -2 - e_a_r
-    r_factor = r_sc/1
-    v_a_a = 29.8*(r_factor^(-1))
-    v_factor = ( (
-        ( v_sc_r )^2 
-        + ( v_sc_t - v_a_a )^2
-      )^0.5 
-      ) / abs( v_earth_a - v_a_a )
-    radial_impact_velocity = -1* ( v_sc_r ) 
-      #positive is on the heatshield, negative on the tail
-    azimuthal_impact_velocity = abs( v_sc_t - v_a_a )
-      #always positive, RHS vs LHS plays no role
-    impact_angle = atan( azimuthal_impact_velocity / radial_impact_velocity )
+    v_front_bound = -v_sc_r
+    v_side_bound = ((29.8/r_sc)-v_sc_t)
+    L_a_raw = (
+      ((v_front_bound^2+v_side_bound^2)^0.5)/50
+    )^(e_b_v)*r_sc^(e_a_r)*l_a
     
-    frontside = radial_impact_velocity > 0
-    backside = (frontside != TRUE)
-    area = (   frontside * shield_sens * area_front * cos(impact_angle) 
-             + backside  * 1           * area_front * cos(impact_angle) 
-             + area_side * sin(abs(impact_angle)) )
+    area_coeff <- ifelse(v_front_bound > 0,
+                         (abs(v_front_bound) * area_front * shield_sens 
+                          + abs(v_side_bound) * area_side) /
+                           (abs(v_front_bound) * area_front 
+                            + abs(v_side_bound) * area_side),
+                         1)
     
-    L_a = l_a * area * (v_factor)^e_a_v * (r_factor)^e_a_r
+    L_a = L_a_raw * area_coeff # [hour^-1]
     
     #normalization to hourly rate, while L_i are in s^-1
-    hourly_rate = 3600 * ( L_b + L_a )
+    hourly_rate = ( L_b + L_a )
     return(hourly_rate)
   }
-  
-  
   
   interpret.theta <- function(){
     return(list(l_a   = exp(theta[1L]),
@@ -136,7 +125,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   mu <- function(){
     par = interpret.theta()
     return(log( rate(#covariates
-                     vr, vt, r, vx, vy, vz, area_front, area_side,
+                     vr, vt, r, area_front, area_side,
                      #hyperparameters
                      par$l_a, 
                      par$shield_sens
@@ -162,8 +151,8 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   
   # Initial values of theta
   initial <- function(){
-    #initial values set to the maxima a priori
-    return(c(log(optimize(prior.l_a,  interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum),
+    #initial values set to the maxima a prior
+    return(c(log(optimize(prior.l_a,  interval = c(0, 1e2), maximum = TRUE, tol=1e-3)$maximum),
              log(optimize(prior.shield_sens, interval = c(0, 1), maximum = TRUE, tol=1e-6)$maximum)
             )
           )
@@ -184,29 +173,23 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
 ###################################
 
 mydata_solo = read.csv(file = myfile_solo)
-names(mydata_solo)[c(2,3,4,5,6,9,10,11)] = c("flux",
+names(mydata_solo)[c(2,3,4,5,6)] = c("flux",
                                              "vr",
                                              "vt",
                                              "r",
-                                             "exposure",
-                                             "vx",
-                                             "vy",
-                                             "vz")
+                                             "exposure")
 mydata_solo$area_front = 10
 mydata_solo$area_side = 8
 mydata_solo$sc_id = 1
 
 mydata_psp = read.csv(file = myfile_psp)
-names(mydata_psp)[c(2,3,4,5,6,9,10,11,12,13)] = c("flux",
-                                                  "vr",
-                                                  "vt",
-                                                  "r",
-                                                  "exposure",
-                                                  "vx",
-                                                  "vy",
-                                                  "vz",
-                                                  "area_front",
-                                                  "area_side")
+names(mydata_psp)[c(2,3,4,5,6,12,13)] = c("flux",
+                                          "vr",
+                                          "vt",
+                                          "r",
+                                          "exposure",
+                                          "area_front",
+                                          "area_side")
 mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
@@ -215,7 +198,7 @@ n = length(mydata$vr)
 mydata$idx = 1:n 
 
 #filterinng to far-from the Sun only
-mydata_far <- subset(mydata, r > 0.5 & sc_id == 2 & exposure > 1e-6)
+mydata_substet <- subset(mydata, sc_id == 2 & exposure > 1e-6)
 
 
 ###################################
@@ -227,13 +210,10 @@ rgen = inla.rgeneric.define(model = two_component_model,
                             vr = mydata$vr, 
                             vt = mydata$vt, 
                             r  = mydata$r,
-                            vx = mydata$vx,
-                            vy = mydata$vy,
-                            vz = mydata$vz,
                             area_front = mydata$area_front,
                             area_side  = mydata$area_side)
 result = inla(flux ~ -1 + f(idx, model = rgen),
-              data = mydata_far, family = "poisson", E = exposure, 
+              data = mydata_substet, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
               safe = TRUE, verbose = TRUE)
 
@@ -246,12 +226,12 @@ max(result$cpo$failure)       # also OK
 #save(pit, file = "998_generated\\inla\\pit.RData")
 
 #plotting histogram
-span = round(max(abs(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean),40)+0.5)
-hist(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean,
+span = round(max(abs(mydata_substet$flux/mydata_substet$exposure-result$summary.fitted.values$mean),40)+0.5)
+hist(mydata_substet$flux/mydata_substet$exposure-result$summary.fitted.values$mean,
      breaks=c(-span:span),
      main="")
 mtext(paste("residuals histogram, stdev = ",
-            as.character(sqrt(var(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean))),
+            as.character(sqrt(var(mydata_substet$flux/mydata_substet$exposure-result$summary.fitted.values$mean))),
             ", log(mlik) = ",
             result$mlik[1]), side=3)
   
@@ -274,7 +254,7 @@ par(mfrow = c(1, 1))
 ####### Rate decomposition ########
 ###################################
 
-len = length(mydata_far$Julian.date)
+len = length(mydata_substet$Julian.date)
 total_rate = numeric(len)
 bound_rate = numeric(len)
 beta_rate = numeric(len)
@@ -290,25 +270,19 @@ for (i in 1:len) {
   particuler_beta_rates  = numeric(samples)
   for (j in 1:samples) {
     particuler_total_rates[j] <- two_component_model(cmd="rate", 
-                                           feed_c = c(mydata_far$vr[i],
-                                                      mydata_far$vt[i],
-                                                      mydata_far$r[i],
-                                                      mydata_far$vx[i],
-                                                      mydata_far$vy[i],
-                                                      mydata_far$vz[i],
-                                                      mydata_far$area_front[i],
-                                                      mydata_far$area_side[i]),
+                                           feed_c = c(mydata_substet$vr[i],
+                                                      mydata_substet$vt[i],
+                                                      mydata_substet$r[i],
+                                                      mydata_substet$area_front[i],
+                                                      mydata_substet$area_side[i]),
                                            feed_h = c(sample_l_a[j],
                                                       sample_shield_sens[j]))
     particuler_beta_rates[j] <- two_component_model(cmd="rate", 
-                                           feed_c = c(mydata_far$vr[i],
-                                                      mydata_far$vt[i],
-                                                      mydata_far$r[i],
-                                                      mydata_far$vx[i],
-                                                      mydata_far$vy[i],
-                                                      mydata_far$vz[i],
-                                                      mydata_far$area_front[i],
-                                                      mydata_far$area_side[i]),
+                                           feed_c = c(mydata_substet$vr[i],
+                                                      mydata_substet$vt[i],
+                                                      mydata_substet$r[i],
+                                                      mydata_substet$area_front[i],
+                                                      mydata_substet$area_side[i]),
                                            feed_h = c(0,
                                                       sample_shield_sens[j]))
 
@@ -318,14 +292,14 @@ for (i in 1:len) {
 }
 
 par(mfrow = c(1, 1))
-plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
+plot(mydata_substet$flux/mydata_substet$exposure, ylab="counts/E")
 lines(result$summary.fitted.values$mean, col=2, lwd=3)
-#normalization due to random effect, has no meaning with a single spacecraft
-lines(beta_rate / total_rate * result$summary.fitted.values$mean, col=4, lwd=3)
-legend(0, 50, legend=c("total", "beta"),
-       col = c(2, 4),
-       lty = c(1, 1),
-       lwd = c(3, 3))
+lines(beta_rate, col=3, lwd=3)
+lines(total_rate-beta_rate, col=4, lwd=3)
+legend(0, 200, legend=c("total", "beta", "bound"),
+       col = c(2, 3, 4),
+       lty = c(1, 1, 1),
+       lwd = c(3, 3, 3))
 
 
 
