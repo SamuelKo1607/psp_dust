@@ -11,6 +11,7 @@ import pickle
 from load_data import Observation
 from load_data import load_all_obs
 from overplot_with_solo_result import read_legacy_inla_result
+from overplot_with_solo_result import get_poisson_range
 from paths import all_obs_location
 from paths import legacy_inla_champion
 from paths import figures_location
@@ -105,7 +106,7 @@ def mu_vectorized(b1, b2, c1, c2, v1,
                         )**(b1)*r**(bound_r_exponent)*c3
 
         backside_hit = v_front_bound<0
-        frontside_hit = v_side_bound>=0
+        frontside_hit = v_front_bound>=0
 
         area_coeff = ( np.abs(v_front_bound)*area_front*shield_compensation
                        + np.abs(v_side_bound)*area_side
@@ -137,7 +138,8 @@ class TestMuVectorized(unittest.TestCase):
 
 def get_legacy_post_sample(sample_size=10,
                            result_location=legacy_inla_champion,
-                           seed=123):
+                           seed=123,
+                           smooth=True):
     """
     Gets a sample from the joint posterior of 
     the legacy INLA fitting for SolO.
@@ -151,6 +153,9 @@ def get_legacy_post_sample(sample_size=10,
         The default is legacy_inla_champion.
     seed : int, optional
         The seed, for consisentency. The default is 123.
+    smooth : bool, optional
+        Whether to provide single-element arrays with 
+        posterior means rather than samples.
 
     Returns
     -------
@@ -167,13 +172,20 @@ def get_legacy_post_sample(sample_size=10,
 
     """
     b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(result_location)
-    np.random.seed(seed)
-    sample = np.random.choice(np.arange(len(b1s)), size=sample_size)
-    b1 = b1s[sample]
-    b2 = b2s[sample]
-    c1 = c1s[sample]
-    c2 = c2s[sample]
-    v1 = v1s[sample]
+    if smooth:
+        b1 = np.array([np.mean(b1s)])
+        b2 = np.array([np.mean(b2s)])
+        c1 = np.array([np.mean(c1s)])
+        c2 = np.array([np.mean(c2s)])
+        v1 = np.array([np.mean(v1s)])
+    else:
+        np.random.seed(seed)
+        sample = np.random.choice(np.arange(len(b1s)), size=sample_size)
+        b1 = b1s[sample]
+        b2 = b2s[sample]
+        c1 = c1s[sample]
+        c2 = c2s[sample]
+        v1 = v1s[sample]
     return b1, b2, c1, c2, v1
 
 
@@ -221,67 +233,26 @@ def get_poisson_rate(mus,
     return probty_table
 
 
-def get_poisson_range(mus,
-                      duty_hours,
-                      prob_coverage=0.9999):
-    """
-    To make the fitting robus, we need to include only reasonable points. 
-    Here we evalueate the range of reasonable points for the given rates.
-
-    Parameters
-    ----------
-    mus : np.array of float
-        the vector of rates [/h] as computed by mu().
-    duty_hours : np.array of float
-        the vector of exposures [h], the same length as mus.
-    prob_coverage : float, optional
-        The acceptable range for a value. 1 mieans that all are included,
-        0.9 means that only the ones tha fall within 90% of the 
-        most likely results are included. The default is 0.9999.
-
-    Raises
-    ------
-    Exception
-        If the input vectors differ in length.
-
-    Returns
-    -------
-    lower_boundaries : np.array of float
-        The lowest acceptable counts, given the rates.
-    upper_boundaries : np.array of float
-        The highest acceptable counts, given the rates.
-
-    """
-
-    if len(mus)!=len(duty_hours):
-        raise Exception("len(mus)!=len(duty_hours):"
-                        +f" {len(mus)} vs {len(duty_hours)}")
-
-    lower_boundaries = stats.poisson.ppf(0.5-prob_coverage/2,
-                                         mu=mus*duty_hours)
-    upper_boundaries = stats.poisson.ppf(0.5+prob_coverage/2,
-                                         mu=mus*duty_hours)
-
-    return lower_boundaries, upper_boundaries
-
-
 def loglik(b1, b2, c1, c2, v1,
            r, vr, vt,
            duty_hours,
            detected,
            shield_compensation=0.3,
-           c3=2.5):
+           c3=2.5,
+           model_prefact=0.59,
+           prob_coverage=0.99):
 
     logliks = []
     accepted = []
     for i in range(len(b1)):
         mus = mu_vectorized(b1[i], b2[i], c1[i], c2[i], v1[i], r, vr, vt,
                             shield_compensation=shield_compensation,
-                            c3=c3)
+                            c3=c3)*model_prefact
     
-        lower_reason, upper_reason = get_poisson_range(mus,
-                                                       duty_hours,
-                                                       prob_coverage=0.99)
+        lower_reason, upper_reason = get_poisson_range(
+                                                mus,
+                                                duty_hours,
+                                                prob_coverage=prob_coverage)
         mask_low_enough = detected<upper_reason
         mask_high_enough = detected>lower_reason
         mask = mask_low_enough * mask_high_enough
@@ -301,7 +272,9 @@ def loglik(b1, b2, c1, c2, v1,
 
 def main(shield_corrections=np.linspace(0.1,0.5,30),
          c3s=np.linspace(0,5,30),
-         plot=False):
+         prob_coverage=0.99,
+         plot=False,
+         levels=10):
 
     b1, b2, c1, c2, v1 = get_legacy_post_sample()
 
@@ -316,23 +289,29 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
 
     shield_corrections = shield_corrections
     c3s = c3s
+    sc_expanded, c3_expanded = np.meshgrid(shield_corrections, c3s)
+    sc_expanded = sc_expanded.reshape(-1)
+    c3_expanded = c3_expanded.reshape(-1)
     logliks = np.zeros((len(shield_corrections),len(c3s)),dtype=float)
     acceptables = np.zeros((len(shield_corrections),len(c3s)),dtype=float)
-    for i, sc in enumerate(shield_corrections):
-        for j, c3 in enumerate(c3s):
-            iloglik, iacceptable = loglik(b1, b2, c1, c2, v1,
-                                          r, vr, vt, duty_hours, detected,
-                                          shield_compensation=sc,
-                                          c3=c3)
-            logliks[i,j] = iloglik
-            acceptables[i,j] = iacceptable
-            print(dt.datetime.now())
-            print(logliks[i,j],acceptables[i,j])
+    for i in tqdm(range(len(sc_expanded))):
+        sc = sc_expanded[i]
+        c3 = c3_expanded[i]
+        x = np.where(shield_corrections==sc)[0][0]
+        y = np.where(c3s==c3)[0][0]
+        iloglik, iacceptable = loglik(b1, b2, c1, c2, v1,
+                                      r, vr, vt, duty_hours, detected,
+                                      shield_compensation=sc,
+                                      c3=c3,
+                                      prob_coverage=prob_coverage)
+        logliks[x,y] = iloglik
+        acceptables[x,y] = iacceptable
 
     if plot:
         fig, ax = plt.subplots()
         lik = ax.contour(shield_corrections,c3s,
-                         logliks.transpose())
+                         logliks.transpose(),
+                         levels=levels)
         ax.clabel(lik, inline=True, fontsize=10)
         ax.set_title('logliks')
         ax.set_xlabel("shield correction")
@@ -341,7 +320,8 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
     
         fig, ax = plt.subplots()
         lik = ax.contour(shield_corrections,c3s,
-                         acceptables.transpose())
+                         acceptables.transpose(),
+                         levels=levels)
         ax.clabel(lik, inline=True, fontsize=10)
         ax.set_title('acceptable')
         ax.set_xlabel("shield correction")
@@ -356,16 +336,46 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
     with open(grid_fiting_results+f"fit_{timestamp}.dat", "wb") as f:
         pickle.dump(data, f)
 
+    return shield_corrections, c3s, logliks, acceptables
 
+
+def heatmap(shield_corrections, c3s, logliks, acceptables):
+    fig, ax = plt.subplots()
+    im = ax.imshow(np.flip(logliks,axis=1).transpose(),
+                   extent=(min(shield_corrections),
+                           max(shield_corrections),
+                           min(c3s),
+                           max(c3s)),
+                   aspect='auto')
+    cbar = fig.colorbar(im)
+    ax.set_title('logliks')
+    ax.set_xlabel("shield correction")
+    ax.set_ylabel("bound dust flux")
+    fig.show()
+
+    fig, ax = plt.subplots()
+    im = ax.imshow(np.flip(acceptables,axis=1).transpose(),
+                   extent=(min(shield_corrections),
+                           max(shield_corrections),
+                           min(c3s),
+                           max(c3s)),
+                   aspect='auto')
+    cbar = fig.colorbar(im)
+    ax.set_title('acceptables')
+    ax.set_xlabel("shield correction")
+    ax.set_ylabel("bound dust flux")
+    fig.show()
 
 
 #%%
 if __name__ == "__main__":
     unittest.main()
 
-    main(shield_corrections=np.linspace(0.05,0.25,5),
-         c3s=np.linspace(0.5,1.5,5),
-         plot=True)
+    shield_corrections, c3s, logliks, acceptables = main(
+        shield_corrections=np.linspace(0.333,0.337,20),
+        c3s=np.linspace(2.28,2.31,20),
+        prob_coverage=0.9999,
+        plot=True)
 
     # with open(grid_fiting_results+filename, "rb") as f:
     #     data = pickle.load(f)
@@ -373,6 +383,7 @@ if __name__ == "__main__":
     #     c3s = data[1]
     #     logliks = data[2]
     #     acceptables = data[3]
+
 
 
 
