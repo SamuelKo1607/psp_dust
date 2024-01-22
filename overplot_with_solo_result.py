@@ -336,7 +336,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              min_heliocentric_distance=0.,
                              min_duty_hours=2.,
                              prob_coverage=0.9999,
-                             filename=None):
+                             filename=None,
+                             title=None):
     """
     A plot which shows how the old SolO model compares to PSP data. 
 
@@ -515,6 +516,9 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                        lw=0, color="gray", alpha=0.2)
         a.set_xlim(xlo,xhi)
 
+    if title is not None:
+        fig.suptitle(title)
+
     if filename is not None:
         fig.savefig(figures_location+filename+".png",dpi=1200)
 
@@ -523,18 +527,25 @@ def plot_psp_data_solo_model(model_prefact=0.59,
 #%%
 if __name__ == "__main__":
     plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
-                             filename="PSP_SolO_with_bg_v2")
+                             filename="PSP_SolO_with_bg_v2",
+                             title="SolO with bg")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=None,
-                             filename="PSP_SolO_without_bg_v2")
+                             filename="PSP_SolO_without_bg_v2",
+                             title="SolO without bg")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5,
-                             filename="PSP_SolO_shield_coeff_v2")
+                             filename="PSP_SolO_shield_coeff_v2",
+                             title="SolO without bg, shield 0.5")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
                              add_bound=2.5,
-                             filename="PSP_SolO_shield_coeff_bound_found_v2")
+                             filename="PSP_SolO_shield_coeff_bound_found_v2",
+                             title="SolO found randomly")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.335,
                              add_bound=2.295,
-                             filename="PSP_SolO_shield_coeff_bound_fitted_v2")
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.47,
-                             add_bound=0.54,
-                             filename="PSP_SolO_shield_coeff_bound_inla_v2")
+                             filename="PSP_SolO_shield_coeff_bound_fitted_v2",
+                             title="SolO found grid Python")
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.474,
+                             add_bound=0.545,
+                             filename="PSP_SolO_shield_coeff_bound_inla_v2",
+                             title="SolO found INLA")
+
 
