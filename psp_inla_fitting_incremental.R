@@ -31,7 +31,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a,   shape = 2,    scale = 2, log=TRUE))
+    return(dgamma(l_a,   shape = 2,    scale = 0.02, log=TRUE))
   }
   prior.shield_sens <- function(shield_sens=feed_x){
     return(dbeta(shield_sens,  shape1 = 2,  shape2 = 2, log=TRUE))
@@ -198,7 +198,7 @@ n = length(mydata$vr)
 mydata$idx = 1:n 
 
 #filterinng to far-from the Sun only
-mydata_substet <- subset(mydata, sc_id == 2 & exposure > 1e-6)
+mydata_substet <- subset(mydata, r > 0.25 & sc_id == 2 & exposure > 1e-6)
 
 
 ###################################
@@ -215,7 +215,16 @@ rgen = inla.rgeneric.define(model = two_component_model,
 result = inla(flux ~ -1 + f(idx, model = rgen),
               data = mydata_substet, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
-              safe = TRUE, verbose = TRUE)
+              control.inla=list(control.vb=list(enable=FALSE)),
+              verbose = TRUE)
+              #safe = TRUE, verbose = TRUE)
+
+# control.inla=(strategy="gaussian")
+# control.inla=(strategy="eb")
+# control.inla=(strategy="laplace")
+# control.inla=(strategy="simplified.laplace")
+#
+# inla.hyperpar 
 
 summary(result)
 
