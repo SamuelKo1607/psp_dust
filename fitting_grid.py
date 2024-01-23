@@ -273,13 +273,15 @@ def loglik(b1, b2, c1, c2, v1,
 def main(shield_corrections=np.linspace(0.1,0.5,30),
          c3s=np.linspace(0,5,30),
          prob_coverage=0.99,
+         min_heliocentric=0,
          plot=False,
          levels=10):
 
     b1, b2, c1, c2, v1 = get_legacy_post_sample()
 
     psp_obs = [ob for ob in load_all_obs(all_obs_location)
-               if ob.duty_hours>0]
+               if ob.duty_hours>0
+               and ob.heliocentric_distance>min_heliocentric]
     dates = np.array([ob.date for ob in psp_obs])
     r = np.array([ob.heliocentric_distance for ob in psp_obs])
     vr = np.array([ob.heliocentric_radial_speed for ob in psp_obs])
@@ -307,6 +309,13 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
         logliks[x,y] = iloglik
         acceptables[x,y] = iacceptable
 
+    shield_correction_max = shield_corrections[
+        np.where(acceptables==np.max(acceptables))[0][0]
+                                                ]
+    c3s_max = c3s[
+        np.where(acceptables==np.max(acceptables))[1][0]
+                  ]
+
     if plot:
         fig, ax = plt.subplots()
         lik = ax.contour(shield_corrections,c3s,
@@ -322,8 +331,11 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
         lik = ax.contour(shield_corrections,c3s,
                          acceptables.transpose(),
                          levels=levels)
+        ax.scatter(shield_correction_max,c3s_max,c="r")
+        ax.text(shield_correction_max,c3s_max,
+                s=f"{np.max(acceptables)}",ha="left",va="top")
         ax.clabel(lik, inline=True, fontsize=10)
-        ax.set_title('acceptable')
+        ax.set_title(f"acceptable (of {len(psp_obs)} total)")
         ax.set_xlabel("shield correction")
         ax.set_ylabel("bound dust flux")
         fig.show()
@@ -361,7 +373,7 @@ def heatmap(shield_corrections, c3s, logliks, acceptables):
                            max(c3s)),
                    aspect='auto')
     cbar = fig.colorbar(im)
-    ax.set_title('acceptables')
+    ax.set_title('acceptable')
     ax.set_xlabel("shield correction")
     ax.set_ylabel("bound dust flux")
     fig.show()
@@ -372,9 +384,10 @@ if __name__ == "__main__":
     unittest.main()
 
     shield_corrections, c3s, logliks, acceptables = main(
-        shield_corrections=np.linspace(0.333,0.337,20),
-        c3s=np.linspace(2.28,2.31,20),
+        shield_corrections=np.linspace(0.28,0.34,20),
+        c3s=np.linspace(2.2,2.8,20),
         prob_coverage=0.9999,
+        min_heliocentric=0.25,
         plot=True)
 
     # with open(grid_fiting_results+filename, "rb") as f:
