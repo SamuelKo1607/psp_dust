@@ -16,6 +16,7 @@ from ephemeris import get_state
 from paths import l3_dust_location
 from paths import dfb_location
 from paths import psp_ephemeris_file
+from paths import figures_location
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -165,7 +166,9 @@ def get_samples(vdcs,
     return epochs, body_potentials, total_tries
 
 
-def main(samples=100):
+def main(samples=100,
+         quantile=0.90,
+         filename="potentials"):
     epochs, body_potentials, total_tries = get_samples(list_cdf(dfb_location),
                                                        samples=samples)
     rs = np.zeros(0)
@@ -174,14 +177,39 @@ def main(samples=100):
         rs = np.append(rs, r)
     print(total_tries)
     dates = [tt2000_to_date(epoch) for epoch in epochs]
+
+    r = np.linspace(min(rs),max(rs),25)
+    lowers = [np.quantile(body_potentials[(r_lo<rs)*(rs<r_hi)],(1-quantile)/2)
+              for r_lo,r_hi in zip(r[:-1],r[1:])]
+    uppers = [np.quantile(body_potentials[(r_lo<rs)*(rs<r_hi)],1-(1-quantile)/2)
+              for r_lo,r_hi in zip(r[:-1],r[1:])]
+    means = [np.mean(body_potentials[(r_lo<rs)*(rs<r_hi)])
+             for r_lo,r_hi in zip(r[:-1],r[1:])]
+    mid_r = (r[:-1]+r[1:])/2
+    zeros = np.zeros(len(mid_r))
+
     fig, ax = plt.subplots()
-    ax.set_xlabel("Heliocentric distance [AU]")
-    ax.set_ylabel("V1 + V2 + V3 + V4 [V]")
-    ax.scatter(rs,body_potentials)
+    ax.set_xlabel(r"Heliocentric distance $[AU]$")
+    ax.set_ylabel(r"$V_{sc} = V1 + V2 + V3 + V4 [V]$")
+    ax.scatter(rs,body_potentials,c="grey",s=0.5,alpha=0.2,
+               label=f"Sample (size {len(rs)})")
+    ax.plot(mid_r,means,c="red",label="Mean")
+    ax.plot(mid_r,zeros,c="black",ls="dashed")
+    ax.plot(mid_r,lowers,c="blue",label=f"{int(100*quantile)}\% quantile")
+    ax.plot(mid_r,uppers,c="blue")
+    ax.legend(fontsize="x-small")
+    if filename is not None:
+        fig.savefig(figures_location+filename+".png",dpi=600)
     fig.show()
+
     return epochs, rs, body_potentials
 
 #%%
 if __name__ == "__main__":
 
-    epochs, rs, body_potentials = main(samples=10000)
+    epochs, rs, body_potentials = main(samples=100000)
+
+
+
+
+
