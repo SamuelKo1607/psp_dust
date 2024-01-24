@@ -11,4 +11,5 @@ dependencies:
   - cdflib=1.2
   - conda-forge::pyreadr=0.5
   - tqdm=4.65
+  - conda-forge::alive-progress=3.1
 prefix: C:\Users\skoci\anaconda3\envs\psp_dust
