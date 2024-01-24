@@ -8,6 +8,9 @@ from tqdm.auto import tqdm
 
 from load_data import Observation
 from load_data import load_all_obs
+from orientation import fetch_orientation
+from conversions import date_to_tt2000
+
 from paths import all_obs_location
 from paths import legacy_inla_champion
 from paths import figures_location
@@ -333,8 +336,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              smooth_model=True,
                              add_bg_term=True,
                              shield_compensation=None,
-                             min_heliocentric_distance=0.,
-                             min_duty_hours=2.,
+                             min_heliocentric_distance=0.25,
+                             min_duty_hours=0.01,
                              prob_coverage=0.9999,
                              filename=None,
                              title=None):
@@ -391,6 +394,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                if ob.heliocentric_distance > min_heliocentric_distance]
     psp_obs = [ob for ob in psp_obs
                if ob.duty_hours > min_duty_hours]
+    psp_obs = [ob for ob in psp_obs
+               if fetch_orientation(ob.epoch_center) < 10]
     dates = np.array([ob.date for ob in psp_obs])
 
     # gridspec inside gridspec
@@ -524,6 +529,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
 
     fig.show()
 
+
 #%%
 if __name__ == "__main__":
     plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
@@ -547,8 +553,8 @@ if __name__ == "__main__":
         add_bound=0.545,
         filename="PSP_SolO_shield_coeff_bound_inla_fit",
         title="PSP: SolO model no bg, shield + bound fit INLA to all")
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.312,
-        add_bound=2.55,
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.313,
+        add_bound=2.54,
         filename="PSP_SolO_shield_coeff_bound_grid_fit_far",
         title="PSP: SolO model no bg, shield + bound fit grid to r>0.25")
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.324,
