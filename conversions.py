@@ -163,3 +163,9 @@ def jd2YYYYMMDD(jd):
 
 def YYYYMMDD2jd(YYYYMMDD):
     return date2jd(YYYYMMDD2date(YYYYMMDD))
+
+def YYYYMMDD_to_tt2000(YYYYMMDD):
+    return jd_to_tt2000(YYYYMMDD2jd(YYYYMMDD))
+
+def tt2000_to_YYYYMMDD(epoch):
+    return jd2YYYYMMDD(tt2000_to_jd(epoch))
