@@ -7,6 +7,7 @@ from tqdm.auto import tqdm
 from load_data import Observation
 from load_data import load_all_obs
 from load_data import list_cdf
+from conversions import YYYYMMDD_to_tt2000
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -76,11 +77,138 @@ def angle_between(v1, v2):
     return np.arccos(np.clip(np.dot(v1_u, v2_u), -1.0, 1.0))
 
 
+def hand_cdf(epoch,cdfs):
+    """
+    Finds the cdf that covers the requested epoch time.
+
+    Parameters
+    ----------
+    epoch : float
+        The time of interest (tt2000).
+    cdfs : list of str
+        The list of cdfs to go through.
+
+    Returns
+    -------
+    cdf : str or none
+        The file, which covers the requested epoch.
+
+    """
+    YYYYMMDDs = [cdf[cdf.find("3_dust_2")+7:][:-8] for cdf in cdfs]
+    start_epochs = np.array([YYYYMMDD_to_tt2000(YYYYMMDD)
+                             for YYYYMMDD in YYYYMMDDs])
+    end_epochs = start_epochs+3.6e12*24
+    criteria = (start_epochs<epoch)*(end_epochs>epoch)
+    if np.sum(criteria)==0:
+        cdf = None
+    else:
+        index = np.where(criteria)[0][0]
+        cdf = cdfs[index]
+    return cdf
+
+
+def comprehend_position(epochs,
+                        event_epochs,
+                        sc_x,
+                        sc_y,
+                        sc_z,
+                        pointing_z):
+
+    iazimuth = np.zeros(0)
+    ielevation = np.zeros(0)
+    ideviation = np.zeros(0)
+
+    rate_seg_starts = epochs - (epochs[1]-epochs[0])//2
+    rate_seg_ends   = epochs + (epochs[1]-epochs[0])//2
+    count_observed = np.zeros(len(epochs),dtype=int)
+
+    for i,epoch in enumerate(epochs):
+        count_observed[i] = len(event_epochs[
+                                     (event_epochs > rate_seg_starts[i])
+                                    *(event_epochs < rate_seg_ends[i]  )
+                                             ])
+
+    for i,pointing in enumerate(pointing_z):
+        segment = np.argmax(np.cumsum(count_observed)>i)
+        x = sc_x[segment] #AU
+        y = sc_y[segment] #AU
+        z = sc_z[segment] #AU
+        r_normlaized = normalize(np.array([x,y,z]))
+        pointing_projected_to_r = project(pointing,
+                                          r_normlaized)
+        pointing_in_the_plane = pointing - pointing_projected_to_r
+        #get a new base for the perpendicular plane
+        plane_base_z = np.array([0,0,1])-project(np.array([0,0,1]),
+                                                 r_normlaized)
+        plane_base_x = -normalize(np.cross(r_normlaized,plane_base_z))
+        #decompose the pointing vector in the new plane
+        plane_x = np.dot(plane_base_x,pointing_in_the_plane)
+        plane_z = np.dot(plane_base_z,pointing_in_the_plane)
+        # projction onto the normal plane
+        iazimuth = np.append(iazimuth,plane_x)
+        ielevation = np.append(ielevation,plane_z)
+        #deviation angle
+        ideviation = np.append(ideviation,
+                              np.rad2deg(angle_between(-r_normlaized,
+                                                       pointing)))
+
+    iazimuth = iazimuth[~np.isnan(iazimuth)]
+    ielevation = ielevation[~np.isnan(ielevation)]
+    ideviation = ideviation[~np.isnan(ideviation)]
+
+    return iazimuth, ielevation, ideviation
+
+
+def fetch_orientation(epoch,
+                      cdf_location=l3_dust_location):
+    """
+    Provides the deviation angle for a given epoch.
+
+    Parameters
+    ----------
+    epoch : float
+        The time of interest, tt2000.
+    cdf_location : str, optional
+        The folder with all the cdfs. 
+        The default is l3_dust_location.
+
+    Returns
+    -------
+    deviation : float
+        The deviation angle, degrees (0 means the LoS between 
+        PSP and the Sun is perpendicular to the TPS heatd shield).
+
+    """
+
+    cdfs = list_cdf(l3_dust_location)
+    cdf = hand_cdf(epoch,cdfs)
+    cdf_file = cdflib.CDF(cdf)
+
+    epochs = cdf_file.varget("psp_fld_l3_dust_V2_rate_epoch")
+    event_epochs = cdf_file.varget("psp_fld_l3_dust_V2_event_epoch")
+    sc_x = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_x")*AU_per_RS
+    sc_y = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_y")*AU_per_RS
+    sc_z = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_z")*AU_per_RS
+    pointing_z = cdf_file.varget("psp_fld_l3_dust_ej2000_pointing_sc_z_vector")
+
+    iepochs = cdf_file.varget('psp_fld_l3_dust_ej2000_pointing_epoch')
+    iazimuth, ielevation, ideviation = comprehend_position(epochs,
+                                                           event_epochs,
+                                                           sc_x,
+                                                           sc_y,
+                                                           sc_z,
+                                                           pointing_z)
+    deviation = np.interp(epoch,iepochs,ideviation,left=np.nan,right=np.nan)
+
+    return deviation
+
+
 def main(plot=True,
          save=False,
          limit_first_n_days=9999):
     """
-    
+    Cycles thourgh the cdfs and gets the orientation 
+    for every temporal interval.
 
     Parameters
     ----------
@@ -112,70 +240,27 @@ def main(plot=True,
     azimuth = np.zeros(0)
     elevation = np.zeros(0)
     deviation = np.zeros(0)
-    iazimuth = np.zeros(0)
-    ielevation = np.zeros(0)
-    ideviation = np.zeros(0)
-    
+
     cdfs = list_cdf(l3_dust_location)
     for file in tqdm(cdfs[:np.min([limit_first_n_days,len(cdfs)-1])]):
-        azimuth = np.append(azimuth,iazimuth)
-        elevation = np.append(elevation,ielevation)
-        deviation = np.append(deviation,ideviation)
-
-        iazimuth = np.zeros(0)
-        ielevation = np.zeros(0)
-        ideviation = np.zeros(0)
 
         cdf_file = cdflib.CDF(file)
-        cdf_short_name = str(cdf_file.cdf_info().CDF)[
-                             str(cdf_file.cdf_info().CDF).find("psp_fld_l3_")
-                             :-4]
-        YYYYMMDD = file[-16:-8]
         epochs = cdf_file.varget("psp_fld_l3_dust_V2_rate_epoch")
-        rate_seg_starts = epochs - (epochs[1]-epochs[0])//2
-        rate_seg_ends   = epochs + (epochs[1]-epochs[0])//2
         event_epochs = cdf_file.varget("psp_fld_l3_dust_V2_event_epoch")
-        count_observed = np.zeros(len(epochs),dtype=int)
-    
-        for i,epoch in enumerate(epochs):
-            count_observed[i] = len(event_epochs[
-                                         (event_epochs > rate_seg_starts[i])
-                                        *(event_epochs < rate_seg_ends[i]  )
-                                                 ])
-    
         sc_x = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_x")*AU_per_RS
         sc_y = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_y")*AU_per_RS
         sc_z = cdf_file.varget("psp_fld_l3_dust_V2_rate_ej2000_z")*AU_per_RS
         pointing_z = cdf_file.varget("psp_fld_l3_dust_ej2000_pointing_sc_z_vector")
-    
-        for i,pointing in enumerate(pointing_z):
-            segment = np.argmax(np.cumsum(count_observed)>i)
-            x = sc_x[segment] #AU
-            y = sc_y[segment] #AU
-            z = sc_z[segment] #AU
-            r_normlaized = normalize(np.array([x,y,z]))
-            pointing_projected_to_r = project(pointing,
-                                              r_normlaized)
-            pointing_in_the_plane = pointing - pointing_projected_to_r
-            #get a new base for the perpendicular plane
-            plane_base_z = np.array([0,0,1])-project(np.array([0,0,1]),
-                                                     r_normlaized)
-            plane_base_x = -normalize(np.cross(r_normlaized,plane_base_z))
-            #decompose the pointing vector in the new plane
-            plane_x = np.dot(plane_base_x,pointing_in_the_plane)
-            plane_z = np.dot(plane_base_z,pointing_in_the_plane)
-    
-            # projction onto the normal plane
-            iazimuth = np.append(iazimuth,plane_x)
-            ielevation = np.append(ielevation,plane_z)
-    
-            #deviation angle
-            ideviation = np.append(ideviation,
-                                  np.rad2deg(angle_between(-r_normlaized,
-                                                           pointing)))
-    azimuth = azimuth[~np.isnan(azimuth)]
-    elevation = elevation[~np.isnan(elevation)]
-    deviation = deviation[~np.isnan(deviation)]
+
+        iazimuth, ielevation, ideviation = comprehend_position(epochs,
+                                                               event_epochs,
+                                                               sc_x,
+                                                               sc_y,
+                                                               sc_z,
+                                                               pointing_z)
+        azimuth = np.append(azimuth,iazimuth)
+        elevation = np.append(elevation,ielevation)
+        deviation = np.append(deviation,ideviation)
 
     if plot:
         fig, ax = plt.subplots()
@@ -222,7 +307,7 @@ def main(plot=True,
 if __name__ == "__main__":
     azimuth, elevation, deviation = main(plot=True,
                                          save=True,
-                                         limit_first_n_days=9999)
+                                         limit_first_n_days=99)
 
 
 
