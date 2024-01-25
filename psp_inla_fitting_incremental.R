@@ -198,7 +198,7 @@ n = length(mydata$vr)
 mydata$idx = 1:n 
 
 #filterinng to far-from the Sun only
-mydata_substet <- subset(mydata, r > 0.25 & sc_id == 2 & exposure > 1e-6)
+mydata_substet <- subset(mydata, r > 0.35 & sc_id == 2 & exposure > 1e-6)
 
 
 ###################################
