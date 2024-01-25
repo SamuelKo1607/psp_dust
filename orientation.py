@@ -1,12 +1,11 @@
+import os
 import numpy as np
 import cdflib
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import glob
 from tqdm.auto import tqdm
 
-from load_data import Observation
-from load_data import load_all_obs
-from load_data import list_cdf
 from conversions import YYYYMMDD_to_tt2000
 
 import figure_standards as figstd
@@ -152,9 +151,9 @@ def comprehend_position(epochs,
                               np.rad2deg(angle_between(-r_normlaized,
                                                        pointing)))
 
-    iazimuth = iazimuth[~np.isnan(iazimuth)]
-    ielevation = ielevation[~np.isnan(ielevation)]
-    ideviation = ideviation[~np.isnan(ideviation)]
+    # iazimuth = iazimuth[~np.isnan(iazimuth)]
+    # ielevation = ielevation[~np.isnan(ielevation)]
+    # ideviation = ideviation[~np.isnan(ideviation)]
 
     return iazimuth, ielevation, ideviation
 
@@ -180,7 +179,7 @@ def fetch_orientation(epoch,
 
     """
 
-    cdfs = list_cdf(l3_dust_location)
+    cdfs = glob.glob(os.path.join(cdf_location,"psp_fld_*.cdf"))
     cdf = hand_cdf(epoch,cdfs)
     cdf_file = cdflib.CDF(cdf)
 
@@ -198,6 +197,10 @@ def fetch_orientation(epoch,
                                                            sc_y,
                                                            sc_z,
                                                            pointing_z)
+
+    iepochs = iepochs[~np.isnan(ideviation)]
+    ideviation = ideviation[~np.isnan(ideviation)]
+
     deviation = np.interp(epoch,iepochs,ideviation,left=np.nan,right=np.nan)
 
     return deviation
@@ -205,6 +208,7 @@ def fetch_orientation(epoch,
 
 def main(plot=True,
          save=False,
+         impact_weighted=False,
          limit_first_n_days=9999):
     """
     Cycles thourgh the cdfs and gets the orientation 
@@ -218,6 +222,8 @@ def main(plot=True,
     save : bool, optional
         Whether to save the plot. Dummy if plot==0. 
         The default is False.
+    impact_weighted : bool, optional
+        Whether to plot the orientation at the impact times.
     limit_first_n_days : int, optional
         How many days we want to process, up to the number of days available. 
         The default is 9999.
@@ -234,14 +240,14 @@ def main(plot=True,
         The deviation of the shield normal form the LoS to the Sun, degrees.
 
     """
-    psp_obs = [ob for ob in load_all_obs(all_obs_location)
-               if ob.duty_hours>0]
+    # psp_obs = [ob for ob in load_all_obs(all_obs_location)
+    #            if ob.duty_hours>0]
     
     azimuth = np.zeros(0)
     elevation = np.zeros(0)
     deviation = np.zeros(0)
 
-    cdfs = list_cdf(l3_dust_location)
+    cdfs = glob.glob(os.path.join(l3_dust_location,"psp_fld_*.cdf"))
     for file in tqdm(cdfs[:np.min([limit_first_n_days,len(cdfs)-1])]):
 
         cdf_file = cdflib.CDF(file)
@@ -258,9 +264,34 @@ def main(plot=True,
                                                                sc_y,
                                                                sc_z,
                                                                pointing_z)
-        azimuth = np.append(azimuth,iazimuth)
-        elevation = np.append(elevation,ielevation)
-        deviation = np.append(deviation,ideviation)
+        if impact_weighted:
+            if sum(~np.isnan(ideviation))>1 and len(event_epochs):
+                iepoch = cdf_file.varget("psp_fld_l3_dust_ej2000_pointing_epoch")
+                iepoch = iepoch[~np.isnan(ideviation)]
+                iazimuth = iazimuth[~np.isnan(ideviation)]
+                ielevation = ielevation[~np.isnan(ideviation)]
+                ideviation = ideviation[~np.isnan(ideviation)]
+                # interpolte to the impact epochs
+                iazimuth = np.interp(event_epochs, iepoch, iazimuth,
+                                     left=np.nan, right=np.nan)
+                ielevation = np.interp(event_epochs, iepoch, ielevation,
+                                     left=np.nan, right=np.nan)
+                ideviation = np.interp(event_epochs, iepoch, ideviation,
+                                     left=np.nan, right=np.nan)
+    
+                azimuth = np.append(azimuth,
+                                    iazimuth[~np.isnan(iazimuth)])
+                elevation = np.append(elevation,
+                                      ielevation[~np.isnan(ielevation)])
+                deviation = np.append(deviation,
+                                      ideviation[~np.isnan(ideviation)])
+            else:
+                pass
+
+        else:
+            azimuth = np.append(azimuth,iazimuth[~np.isnan(iazimuth)])
+            elevation = np.append(elevation,ielevation[~np.isnan(ielevation)])
+            deviation = np.append(deviation,ideviation[~np.isnan(ideviation)])
 
     if plot:
         fig, ax = plt.subplots()
@@ -307,7 +338,8 @@ def main(plot=True,
 if __name__ == "__main__":
     azimuth, elevation, deviation = main(plot=True,
                                          save=True,
-                                         limit_first_n_days=99)
+                                         impact_weighted=True,
+                                         limit_first_n_days=9999)
 
 
 
