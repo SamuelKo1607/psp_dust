@@ -336,7 +336,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              smooth_model=True,
                              add_bg_term=True,
                              shield_compensation=None,
-                             min_heliocentric_distance=0.25,
+                             min_heliocentric_distance=0.0,
                              min_duty_hours=0.01,
                              prob_coverage=0.9999,
                              filename=None,
@@ -395,7 +395,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     psp_obs = [ob for ob in psp_obs
                if ob.duty_hours > min_duty_hours]
     psp_obs = [ob for ob in psp_obs
-               if fetch_orientation(ob.epoch_center) < 10]
+               if ob.los_deviation < 10]
     dates = np.array([ob.date for ob in psp_obs])
 
     # gridspec inside gridspec
@@ -491,11 +491,11 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     ax[2].scatter(dates[preperi],
                detecteds[preperi]
                /(mean_expected_counts[preperi]),
-               s=0.5,c="firebrick",label="Pre-perihelion")
+               s=0.5,c="maroon",label="Pre-perihelion")
     ax[2].scatter(dates[postperi],
                detecteds[postperi]
                /(mean_expected_counts[postperi]),
-               s=0.5,c="orangered",label="Post-perihelion")
+               s=0.5,c="radkorange",label="Post-perihelion")
 
     ax[2].set_yscale("log")
     xlo,xhi = ax[2].get_xlim()
