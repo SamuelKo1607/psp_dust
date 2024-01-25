@@ -535,28 +535,35 @@ if __name__ == "__main__":
     plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
         filename="PSP_SolO_with_bg",
         title="PSP: SolO model with bg")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=None,
         filename="PSP_SolO_without_bg",
         title="PSP: SolO model without bg")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.5,
         filename="PSP_SolO_shield_coeff",
         title="PSP: SolO model without bg, shield eff. = 0.5")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
         add_bound=2.5,
         filename="PSP_SolO_shield_coeff_bound_found",
         title="PSP: SolO model no bg, shield eff. = 0.5, bound = 2.5")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.335,
         add_bound=2.295,
         filename="PSP_SolO_shield_coeff_bound_grid_fit",
         title="PSP: SolO model no bg, shield + bound fit grid to all")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.474,
         add_bound=0.545,
         filename="PSP_SolO_shield_coeff_bound_inla_fit",
         title="PSP: SolO model no bg, shield + bound fit INLA to all")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.313,
         add_bound=2.54,
         filename="PSP_SolO_shield_coeff_bound_grid_fit_far",
         title="PSP: SolO model no bg, shield + bound fit grid to r>0.25")
+
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.324,
         add_bound=1.5,
         filename="PSP_SolO_shield_coeff_bound_inla_fit_far",
