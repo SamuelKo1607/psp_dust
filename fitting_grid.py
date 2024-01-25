@@ -274,6 +274,7 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
          c3s=np.linspace(0,5,30),
          prob_coverage=0.99,
          min_heliocentric=0,
+         max_deviation=180,
          plot=False,
          levels=10):
 
@@ -281,7 +282,8 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
 
     psp_obs = [ob for ob in load_all_obs(all_obs_location)
                if ob.duty_hours>0
-               and ob.heliocentric_distance>min_heliocentric]
+               and ob.heliocentric_distance>min_heliocentric
+               and ob.los_deviation<max_deviation]
     dates = np.array([ob.date for ob in psp_obs])
     r = np.array([ob.heliocentric_distance for ob in psp_obs])
     vr = np.array([ob.heliocentric_radial_speed for ob in psp_obs])
@@ -384,10 +386,11 @@ if __name__ == "__main__":
     unittest.main()
 
     shield_corrections, c3s, logliks, acceptables = main(
-        shield_corrections=np.linspace(0.28,0.34,20),
-        c3s=np.linspace(2.2,2.8,20),
+        shield_corrections=np.linspace(0.1,0.4,40),
+        c3s=np.linspace(0.5,3.0,40),
         prob_coverage=0.9999,
-        min_heliocentric=0.25,
+        min_heliocentric=0.35,
+        max_deviation=10,
         plot=True)
 
     # with open(grid_fiting_results+filename, "rb") as f:
