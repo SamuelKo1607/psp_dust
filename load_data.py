@@ -5,10 +5,12 @@ import pickle
 import datetime as dt
 import numpy as np
 from scipy import io
+from tqdm.auto import tqdm
 
 from conversions import tt2000_to_date
 from conversions import tt2000_to_jd
 from ephemeris import get_state
+from orientation import fetch_orientation
 
 from paths import l3_dust_location
 from paths import all_obs_location
@@ -76,6 +78,7 @@ class Observation:
                                 * np.sin(np.deg2rad(velocity_phase)) )
         self.velocity_HAE_z = ( spacecraft_speed
                                 * np.cos(np.deg2rad(90-velocity_inclination)) )
+        self.los_deviation = fetch_orientation(epoch_center)
         self.produced = dt.datetime.now()
 
 
@@ -460,7 +463,7 @@ def main(dust_location=l3_dust_location,
         The agregated data.
     """
     observations = []
-    for file in list_cdf(dust_location):
+    for file in tqdm(list_cdf(dust_location)):
         cdf_file = cdflib.CDF(file)
         cdf_short_name = str(cdf_file.cdf_info().CDF)[
                              str(cdf_file.cdf_info().CDF).find("psp_fld_l3_")
