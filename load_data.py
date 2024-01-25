@@ -78,7 +78,7 @@ class Observation:
                                 * np.sin(np.deg2rad(velocity_phase)) )
         self.velocity_HAE_z = ( spacecraft_speed
                                 * np.cos(np.deg2rad(90-velocity_inclination)) )
-        self.los_deviation = fetch_orientation(epoch_center)
+        self.los_deviation = fetch_orientation(epoch_center) #degrees
         self.produced = dt.datetime.now()
 
 
