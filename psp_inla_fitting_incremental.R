@@ -178,18 +178,20 @@ names(mydata_solo)[c(2,3,4,5,6)] = c("flux",
                                              "vt",
                                              "r",
                                              "exposure")
+mydata_solo$angle = 0
 mydata_solo$area_front = 10
 mydata_solo$area_side = 8
 mydata_solo$sc_id = 1
 
 mydata_psp = read.csv(file = myfile_psp)
-names(mydata_psp)[c(2,3,4,5,6,12,13)] = c("flux",
-                                          "vr",
-                                          "vt",
-                                          "r",
-                                          "exposure",
-                                          "area_front",
-                                          "area_side")
+names(mydata_psp)[c(2,3,4,5,6,12,13,14)] = c("flux",
+                                            "vr",
+                                            "vt",
+                                            "r",
+                                            "exposure",
+                                            "angle",
+                                            "area_front",
+                                            "area_side")
 mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
