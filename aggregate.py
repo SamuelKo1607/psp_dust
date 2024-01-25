@@ -43,6 +43,7 @@ def make_flux_to_fit_inla(observations,
                          "V_X (HAE) [km/s]",
                          "V_Y (HAE) [km/s]",
                          "V_Z (HAE) [km/s]",
+                         "Deviation angle [deg]",
                          "Area front [m^2]",
                          "Area side [m^2]"])
         for obs in observations:
@@ -57,7 +58,7 @@ def make_flux_to_fit_inla(observations,
                              str(obs.velocity_HAE_x),
                              str(obs.velocity_HAE_y),
                              str(obs.velocity_HAE_z),
-                             #TBD function from projection.py?
+                             str(obs.los_deviation),
                              6.11,
                              4.62])
 
