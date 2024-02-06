@@ -302,7 +302,7 @@ for (i in 1:len) {
   beta_rate[i]  <- mean(particuler_beta_rates)
 }
 
-par(mfrow = c(1, 1))
+par(mfrow = c(1, 1), mar=c(5.1, 4.1, 4.1, 2.1))
 plot(mydata_substet$flux/mydata_substet$exposure, ylab="counts/E")
 lines(result$summary.fitted.values$mean, col=2, lwd=3)
 lines(beta_rate, col=3, lwd=3)
@@ -311,6 +311,17 @@ legend(0, 200, legend=c("total", "beta", "bound"),
        col = c(2, 3, 4),
        lty = c(1, 1, 1),
        lwd = c(3, 3, 3))
+
+par(mfrow = c(1, 1), mar=c(5.1, 4.1, 4.1, 2.1))
+plot(beta_rate/total_rate, type="l", lwd=3, 
+     main = "beta vs bound", 
+     xlab = "days",
+     ylab = "beta / total",
+     ylim = c(0,1))
+
+
+
+
 
 
 
