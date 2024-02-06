@@ -301,6 +301,7 @@ def main(plot=True,
         fig.colorbar(im, ax=ax, label=r"$count$")
         ax.set_xlabel("Prograde unit projection [1]")
         ax.set_ylabel("HAE Z unit projection [1]")
+        fig.tight_layout()
         if save:
             fig.savefig(figures_location+"orientation_projections_lin"+".png",
                         dpi=400)
@@ -313,6 +314,7 @@ def main(plot=True,
         fig.colorbar(im, ax=ax, label=r"$log_{10}(count)$")
         ax.set_xlabel("Prograde unit projection [1]")
         ax.set_ylabel("HAE Z unit projection [1]")
+        fig.tight_layout()
         if save:
             fig.savefig(figures_location+"orientation_projections_log"+".png",
                         dpi=400)
@@ -327,6 +329,7 @@ def main(plot=True,
         ylim = ax.set_ylim(0,ylim)
         ax.set_xlabel("Deviation angle [deg]")
         ax.set_ylabel("Count [1]")
+        fig.tight_layout()
         if save:
             fig.savefig(figures_location+"orientation_deviations"+".png",
                         dpi=400)
@@ -338,7 +341,7 @@ def main(plot=True,
 if __name__ == "__main__":
     azimuth, elevation, deviation = main(plot=True,
                                          save=True,
-                                         impact_weighted=True,
+                                         impact_weighted=False,
                                          limit_first_n_days=9999)
 
 
