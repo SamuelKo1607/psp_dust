@@ -4,6 +4,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.colors as mcolors
 import pyreadr
+import datetime as dt
 from tqdm.auto import tqdm
 
 from load_data import Observation
@@ -338,7 +339,8 @@ def plot_psp_data_solo_model(model_prefact=0.59,
                              shield_compensation=None,
                              min_heliocentric_distance=0.0,
                              min_duty_hours=0.01,
-                             prob_coverage=0.9999,
+                             prob_coverage=0.99,
+                             threshold=0.5,
                              filename=None,
                              title=None):
     """
@@ -377,7 +379,10 @@ def plot_psp_data_solo_model(model_prefact=0.59,
         The minimum amount of time [hr] per interval needed for the point 
         to be shown. The default is 2..
     prob_coverage : float, optional
-        The threshold for outliers. The default is 0.9999.
+        The threshold for outliers. The default is 0.99.
+    threshold : float, optional
+        The thresholds to show at each orbit in AU, such as 0.5AU cross. 
+        The default is 0.5AU. Not shown in None.
     filename : str, optional
         The filename of the .png to be saved. the default is None, in which
         case, the plot is not saved.
@@ -467,10 +472,21 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     # Plot model line
     if smooth_model:
         mean_expected_counts = mus*24*duty_dayss
+    eff_rate = mean_expected_counts/duty_dayss
     for a in ax[0:2]:
-        a.plot(dates,mean_expected_counts/duty_dayss,
+        a.plot(dates,eff_rate,
                c="blue",lw=0.5,zorder=101,
                label=f"{model_prefact}x SolO model")
+
+    # Plot threshold distance crossings
+    if threshold is not None:
+        for i,date in enumerate(dates[:-1]):
+            if (psp_obs[i].heliocentric_distance > threshold
+                and psp_obs[i+1].heliocentric_distance < threshold):
+                ax[1].hlines(eff_rate[i],
+                             date-dt.timedelta(days=10),
+                             date+dt.timedelta(days=30),
+                             zorder=102,color="k")
 
     # Plot model errorbars
     for a in ax[0:2]:
@@ -495,7 +511,7 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     ax[2].scatter(dates[postperi],
                detecteds[postperi]
                /(mean_expected_counts[postperi]),
-               s=0.5,c="radkorange",label="Post-perihelion")
+               s=0.5,c="darkorange",label="Post-perihelion")
 
     ax[2].set_yscale("log")
     xlo,xhi = ax[2].get_xlim()
@@ -547,10 +563,10 @@ if __name__ == "__main__":
     plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.3,
         add_bound=2.5,
         filename="PSP_SolO_shield_coeff_bound_found",
-        title="PSP: SolO model no bg, shield eff. = 0.5, bound = 2.5")
+        title="PSP: SolO model no bg, shield eff. = 0.3, bound = 2.5")
 
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.335,
-        add_bound=2.295,
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.43,
+        add_bound=1.23,
         filename="PSP_SolO_shield_coeff_bound_grid_fit",
         title="PSP: SolO model no bg, shield + bound fit grid to all")
 
@@ -559,15 +575,15 @@ if __name__ == "__main__":
         filename="PSP_SolO_shield_coeff_bound_inla_fit",
         title="PSP: SolO model no bg, shield + bound fit INLA to all")
 
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.313,
-        add_bound=2.54,
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.247,
+        add_bound=2.71,
         filename="PSP_SolO_shield_coeff_bound_grid_fit_far",
-        title="PSP: SolO model no bg, shield + bound fit grid to r>0.25")
+        title="PSP: SolO model no bg, shield + bound fit grid to r>0.5")
 
-    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.324,
-        add_bound=1.5,
+    plot_psp_data_solo_model(add_bg_term=False,shield_compensation=0.28,
+        add_bound=1.73,
         filename="PSP_SolO_shield_coeff_bound_inla_fit_far",
-        title="PSP: SolO model no bg, shield + bound fit INLA to r>0.25")
+        title="PSP: SolO model no bg, shield + bound fit INLA to r>0.5")
 
 
 
