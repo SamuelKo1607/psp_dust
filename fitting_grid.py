@@ -191,7 +191,8 @@ def get_legacy_post_sample(sample_size=10,
 
 def get_poisson_rate(mus,
                      duty_hours,
-                     max_detections=3000):
+                     max_detections=3000,
+                     log10=False):
     """
     TBD
 
@@ -206,6 +207,9 @@ def get_poisson_rate(mus,
         Since we use this to lalculate log likelihood, we need a number
         higher than the highest number of detections in the dataset.
         The default is 3000.
+    log : bool, optional
+        Whether we want a logarithmic likelihood, optional.
+        The default is False.
 
     Raises
     ------
@@ -226,8 +230,13 @@ def get_poisson_rate(mus,
 
     probty_table = np.zeros(shape=(len(mus), max_detections),dtype=float)
     for i in range(len(mus)):
-        probty_single_mu = stats.poisson.pmf(np.arange(max_detections),
-                                             mus[i]*duty_hours[i])
+        if log10:
+            probty_single_mu = stats.poisson.logpmf(
+                                    np.arange(max_detections),
+                                    mus[i]*duty_hours[i])/np.log(10)
+        else:
+            probty_single_mu = stats.poisson.pmf(np.arange(max_detections),
+                                                 mus[i]*duty_hours[i])
         probty_table[i,:] = probty_single_mu
 
     return probty_table
@@ -261,9 +270,10 @@ def loglik(b1, b2, c1, c2, v1,
         reasonable_duty_hours = duty_hours[mask]
         reasonable_detected = detected[mask]
 
-        table = get_poisson_rate(reasonable_mus,reasonable_duty_hours)
-        sliced = np.log10(table[np.arange(np.shape(table)[0]),
-                                reasonable_detected])
+        table = get_poisson_rate(reasonable_mus,reasonable_duty_hours,
+                                 log10=True)
+        sliced = table[np.arange(np.shape(table)[0]),
+                                reasonable_detected]
         logliks.append(np.mean(sliced))
         accepted.append(sum(mask))
 
@@ -311,36 +321,46 @@ def main(shield_corrections=np.linspace(0.1,0.5,30),
         logliks[x,y] = iloglik
         acceptables[x,y] = iacceptable
 
-    shield_correction_max = shield_corrections[
-        np.where(acceptables==np.max(acceptables))[0][0]
-                                                ]
-    c3s_max = c3s[
-        np.where(acceptables==np.max(acceptables))[1][0]
-                  ]
+    lik_shield_correction_max = shield_corrections[
+        np.where(logliks==np.max(logliks))[0][0]]
+    lik_c3s_max = c3s[
+        np.where(logliks==np.max(logliks))[1][0]]
+
+    acceptable_shield_correction_max = shield_corrections[
+        np.where(acceptables==np.max(acceptables))[0][0]]
+    acceptable_c3s_max = c3s[
+        np.where(acceptables==np.max(acceptables))[1][0]]
 
     if plot:
         fig, ax = plt.subplots()
         lik = ax.contour(shield_corrections,c3s,
                          logliks.transpose(),
                          levels=levels)
+        ax.scatter(lik_shield_correction_max,
+                   lik_c3s_max,c="r")
+        ax.text(lik_shield_correction_max,
+                lik_c3s_max,
+                s=f"{np.max(logliks)}",ha="left",va="top")
         ax.clabel(lik, inline=True, fontsize=10)
         ax.set_title('logliks')
         ax.set_xlabel("shield correction")
         ax.set_ylabel("bound dust flux")
         fig.show()
-    
-        fig, ax = plt.subplots()
-        lik = ax.contour(shield_corrections,c3s,
-                         acceptables.transpose(),
-                         levels=levels)
-        ax.scatter(shield_correction_max,c3s_max,c="r")
-        ax.text(shield_correction_max,c3s_max,
-                s=f"{np.max(acceptables)}",ha="left",va="top")
-        ax.clabel(lik, inline=True, fontsize=10)
-        ax.set_title(f"acceptable (of {len(psp_obs)} total)")
-        ax.set_xlabel("shield correction")
-        ax.set_ylabel("bound dust flux")
-        fig.show()
+        if prob_coverage < 1.:
+            fig, ax = plt.subplots()
+            lik = ax.contour(shield_corrections,c3s,
+                             acceptables.transpose(),
+                             levels=levels)
+            ax.scatter(acceptable_shield_correction_max,
+                       acceptable_c3s_max,c="r")
+            ax.text(acceptable_shield_correction_max,
+                    acceptable_c3s_max,
+                    s=f"{np.max(acceptables)}",ha="left",va="top")
+            ax.clabel(lik, inline=True, fontsize=10)
+            ax.set_title(f"acceptable (of {len(psp_obs)} total)")
+            ax.set_xlabel("shield correction")
+            ax.set_ylabel("bound dust flux")
+            fig.show()
 
     data = [shield_corrections,
             c3s,
@@ -386,11 +406,11 @@ if __name__ == "__main__":
     unittest.main()
 
     shield_corrections, c3s, logliks, acceptables = main(
-        shield_corrections=np.linspace(0.1,0.4,40),
-        c3s=np.linspace(0.5,3.0,40),
-        prob_coverage=0.9999,
-        min_heliocentric=0.35,
-        max_deviation=10,
+        shield_corrections=np.linspace(0.1,0.8,20),
+        c3s=np.linspace(0.5,4.0,20),
+        prob_coverage=1,
+        min_heliocentric=0.5,
+        max_deviation=20,
         plot=True)
 
     # with open(grid_fiting_results+filename, "rb") as f:
