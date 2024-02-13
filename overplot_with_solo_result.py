@@ -9,12 +9,16 @@ from tqdm.auto import tqdm
 
 from load_data import Observation
 from load_data import load_all_obs
+from load_data import encounter_group
 from orientation import fetch_orientation
 from conversions import date_to_tt2000
+from conversions import jd2date
+from ephemeris import get_approaches
 
 from paths import all_obs_location
 from paths import legacy_inla_champion
 from paths import figures_location
+from paths import psp_ephemeris_file
 
 
 import figure_standards as figstd
@@ -544,6 +548,33 @@ def plot_psp_data_solo_model(model_prefact=0.59,
         fig.savefig(figures_location+filename+".png",dpi=1200)
 
     fig.show()
+
+
+def zoom_plot_maxima(max_perihelia=16):
+
+    approaches = np.linspace(1,16,16,dtype=int)
+
+    approach_dates = np.array([jd2date(a)
+                                  for a
+                                  in get_approaches(psp_ephemeris_file)
+                                  ][:max_perihelia])
+
+    approach_groups = np.array([encounter_group(a)
+                                   for a
+                                   in approaches])
+
+    # tbd prepare the scatter points and the model line
+    # tbd show one max zoom for each approach group
+
+    for group in set(approach_groups):
+        group_approaches = approaches[approach_groups==group]
+        print(group_approaches)
+
+
+
+
+
+
 
 
 #%%
