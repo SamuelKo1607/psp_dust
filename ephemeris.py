@@ -1,6 +1,7 @@
 import numpy as np
 import csv
 from scipy import interpolate
+from scipy.signal import argrelextrema
 import pickle
 import os
 
@@ -249,3 +250,43 @@ def get_state(epoch, ephem_file):
     return r, v, v_rad, v_phi, v_theta
 
 
+def get_approaches(ephem_file,
+                   distance=0.2):
+    """
+    Gets an array of all the approaches at which the spacecraft 
+    got closer than the specified distance.
+
+    Parameters
+    ----------
+    distance : float, optional
+        The approach defining distance in AU. The default is 0.2.
+
+    Returns
+    -------
+    approaches : np.array of floats
+        Julian dates of the approaches.
+
+    """
+
+    (jd,
+     hae,
+     hae_v,
+     hae_phi,
+     radial_v,
+     tangential_v,
+     hae_theta,
+     v_phi,
+     v_theta) = load_ephemeris(ephem_file)
+
+    (f_hel_r,
+     f_hel_phi,
+     f_rad_v,
+     f_tan_v,
+     f_v_phi,
+     f_v_theta) = fetch_heliocentric(ephem_file)
+
+    jd_resampled = np.arange(min(jd),max(jd),1/1440)
+    r_resampled = f_hel_r(jd_resampled)
+    local_minima = argrelextrema(r_resampled, np.less)[0]
+    approaches = jd_resampled[local_minima[r_resampled[local_minima]<distance]]
+    return approaches
