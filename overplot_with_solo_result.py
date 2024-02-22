@@ -571,14 +571,118 @@ def zoom_plot_maxima(max_perihelia=16):
         print(group_approaches)
 
 
+def plot_psp_overplot_linlin(add_bg_term=True,
+                             shield_compensation=1,
+                             add_bound=None,
+                             ymax=11000,
+                             min_heliocentric=0.,
+                             min_duty_hours=0,
+                             max_los_deviation=10,
+                             aspect=2,
+                             filename=None,
+                             title=None):
+    """
+    The plotting procedure of PSP data with model lines overplotted 
+    for the presentation purposes.
 
+    Parameters
+    ----------
+    add_bg_term : bool, optional
+        Wether to include background dust. The default is True.
+    shield_compensation : float, optional
+        The front side detection efficiency. The default is 1.
+    add_bound : float of None, optional
+        The additional rate [/h] of bound dust, normalized to the flux at 1AU.
+        The default is None, in which case, no bound dust is added.
+    ymax : float, optional
+        The upper limit on the Y-axis. The default is 11000.
+    min_heliocentric : float, optional
+        The threshod for the inclusion of points. The default is 0.
+    min_duty_hours : float, optional
+        The minimum data amount for the period needed for the point to 
+        be included (exclusive). The default is 0.
+    max_los_deviation : float, optional
+        The maximum deviation in degrees from the LoS for the point 
+        to be included (exclusive). The default is 10. 
+    aspect : float, optional
+        The aspect ratio of the plot. The default is 2.
+    filename : str of None, optional
+        The name or the file to be saved. Use None to avoid saving.
+        The default is None.
+    title : str or None, optional
+        The suptitle of the plot. Use None to aoid making a suptitle. 
+        The default is "PSP: SolO model with bg, shield eff. = 1".
 
+    Returns
+    -------
+    None.
+
+    """
+
+    b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(legacy_inla_champion)
+    psp_obs = load_all_obs(all_obs_location)
+    psp_obs = [ob for ob in psp_obs
+               if ob.heliocentric_distance >= min_heliocentric]
+    psp_obs = [ob for ob in psp_obs
+               if ob.duty_hours > min_duty_hours]
+    psp_obs = [ob for ob in psp_obs
+               if ob.los_deviation < max_los_deviation]
+    dates = np.array([ob.date for ob in psp_obs])
+
+    # Evaluate the model
+    mus = np.array([mu(np.mean(b1s),
+                       np.mean(b2s),
+                       np.mean(c1s),
+                       np.mean(c2s)*add_bg_term,
+                       np.mean(v1s),
+                       ob.heliocentric_distance,
+                       ob.heliocentric_radial_speed,
+                       ob.heliocentric_tangential_speed,
+                       add_bound,
+                       shield_compensation=shield_compensation)
+                    for ob in psp_obs])*0.59
+
+    # Calculate and plot the scatter plot
+    fig, ax = plt.subplots(figsize=(4, 4/aspect))
+
+    detecteds = np.array([ob.count_corrected for ob in psp_obs])
+    duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
+    lower_ok, upper_ok = get_poisson_range(mus,
+                                           duty_dayss*24,
+                                           prob_coverage=0.9)
+    ax.scatter(dates,detecteds/duty_dayss,
+              c="red",s=1,zorder=100,label="PSP detections")
+
+    # Calculate and plot scatter points' errorbars
+    scatter_points_errors = get_detection_errors(detecteds)
+    ax.errorbar(dates, detecteds/duty_dayss,
+               scatter_points_errors/duty_dayss,
+               c="red", lw=0., elinewidth=0.2,alpha=0.2)
+
+    # Plot model line
+    mean_expected_counts = mus*24*duty_dayss
+    eff_rate = mean_expected_counts/duty_dayss
+    ax.plot(dates,eff_rate,
+           c="blue",lw=0.5,zorder=101,
+           label=f"{0.59}x SolO model")
+
+    ax.set_ylabel("Rate [/24h equiv.]")
+    ax.set_ylim(0,ymax)
+    fig.tight_layout()
+    if title is not None:
+        fig.suptitle(title)
+    if filename is not None:
+        fig.savefig(figures_location+filename+".png",dpi=400)
+        print(f"saved {filename}.png to {figures_location}")
+    fig.show()
 
 
 
 
 #%%
 if __name__ == "__main__":
+
+    """
     plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
         filename="PSP_SolO_with_bg",
         title="PSP: SolO model with bg")
@@ -615,7 +719,10 @@ if __name__ == "__main__":
         add_bound=1.73,
         filename="PSP_SolO_shield_coeff_bound_inla_fit_far",
         title="PSP: SolO model no bg, shield + bound fit INLA to r>0.5")
+    """
 
+    plot_psp_overplot_linlin()
+    plot_psp_overplot_linlin(ymax=500,min_heliocentric=0.5)
 
 
 
