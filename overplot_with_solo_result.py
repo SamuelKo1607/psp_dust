@@ -550,25 +550,91 @@ def plot_psp_data_solo_model(model_prefact=0.59,
     fig.show()
 
 
-def zoom_plot_maxima(max_perihelia=16):
+def zoom_plot_maxima(max_perihelia=16,
+                     add_bg_term=True,
+                     shield_compensation=1,
+                     add_bound=None,
+                     aspect=1.5):
 
+    # Getting the approaches
     approaches = np.linspace(1,16,16,dtype=int)
-
     approach_dates = np.array([jd2date(a)
                                   for a
                                   in get_approaches(psp_ephemeris_file)
                                   ][:max_perihelia])
-
     approach_groups = np.array([encounter_group(a)
                                    for a
                                    in approaches])
 
-    # tbd prepare the scatter points and the model line
-    # tbd show one max zoom for each approach group
+    # Reading INLA output
+    b1s, b2s, c1s, c2s, v1s = read_legacy_inla_result(legacy_inla_champion)
+    psp_obs = load_all_obs(all_obs_location)
+    psp_obs = [ob for ob in psp_obs
+               if ob.duty_hours > 0]
+    psp_obs = [ob for ob in psp_obs
+               if ob.los_deviation < 10]
+    dates = np.array([ob.date for ob in psp_obs])
 
+    # Evaluate the model
+    mus = np.array([mu(np.mean(b1s),
+                       np.mean(b2s),
+                       np.mean(c1s),
+                       np.mean(c2s)*add_bg_term,
+                       np.mean(v1s),
+                       ob.heliocentric_distance,
+                       ob.heliocentric_radial_speed,
+                       ob.heliocentric_tangential_speed,
+                       add_bound,
+                       shield_compensation=shield_compensation)
+                    for ob in psp_obs])*0.59
+
+    # Calculate the scatter plot
+    detecteds = np.array([ob.count_corrected for ob in psp_obs])
+    duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
+    lower_ok, upper_ok = get_poisson_range(mus,
+                                           duty_dayss*24,
+                                           prob_coverage=0.9)
+    scatter_points_errors = get_detection_errors(detecteds)
+
+    # Caluclate the model line
+    mean_expected_counts = mus*24*duty_dayss
+    eff_rate = mean_expected_counts/duty_dayss
+
+    # Iterate the groups
     for group in set(approach_groups):
-        group_approaches = approaches[approach_groups==group]
-        print(group_approaches)
+        fig, ax = plt.subplots(figsize=(4, 4/aspect))
+        ax.set_ylabel("Rate [/24h equiv.]")
+        ax.set_xlabel("Time after perihelia [h]")
+        fig.suptitle(f"Encounter group {group}")
+
+        line_hourdiff = np.zeros(0)
+        line_rate = np.zeros(0)
+
+        for approach_date in approach_dates[approach_groups==group]:
+            filtered_indices = np.abs(dates-approach_date
+                                      )<dt.timedelta(days=7)
+            datediff = dates[filtered_indices]-approach_date
+            hourdiff = [24*d.days + d.seconds/3600
+                        for d in datediff]
+            ax.scatter(hourdiff,
+                       (detecteds[filtered_indices]
+                        /duty_dayss[filtered_indices]),
+                      c="orangered",s=0.6,zorder=100,label="PSP detections")
+            ax.errorbar(hourdiff,
+                        (detecteds[filtered_indices]
+                         /duty_dayss[filtered_indices]),
+                        (np.array([scatter_points_errors[0,filtered_indices],
+                                   scatter_points_errors[1,filtered_indices]
+                                   ])
+                         /duty_dayss[filtered_indices]),
+                       c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
+            line_hourdiff = np.append(line_hourdiff,hourdiff)
+            line_rate = np.append(line_rate,eff_rate[filtered_indices])
+        sortmask = line_hourdiff.argsort()
+        ax.plot(line_hourdiff[sortmask],
+                line_rate[sortmask],
+                c="navy",lw=0.5,zorder=101)
+        fig.show()
 
 
 def plot_psp_overplot_linlin(add_bg_term=True,
@@ -577,8 +643,10 @@ def plot_psp_overplot_linlin(add_bg_term=True,
                              ymax=11000,
                              min_heliocentric=0.,
                              min_duty_hours=0,
-                             max_los_deviation=10,
+                             max_los_deviation=45,
                              aspect=2,
+                             moldel_lw=0.8,
+                             log=False,
                              filename=None,
                              title=None):
     """
@@ -606,6 +674,10 @@ def plot_psp_overplot_linlin(add_bg_term=True,
         to be included (exclusive). The default is 10. 
     aspect : float, optional
         The aspect ratio of the plot. The default is 2.
+    moldel_lw : float, optional
+        The linewidth of the model line.
+    log : bool, optional
+        Whether to plot it semilogy.
     filename : str of None, optional
         The name or the file to be saved. Use None to avoid saving.
         The default is None.
@@ -629,6 +701,10 @@ def plot_psp_overplot_linlin(add_bg_term=True,
                if ob.los_deviation < max_los_deviation]
     dates = np.array([ob.date for ob in psp_obs])
 
+    #Splitting the dates
+    gaps = np.where(np.diff(dates) > dt.timedelta(days=7))[0] + 1
+    chunks = np.split(np.arange(len(dates)), gaps)
+
     # Evaluate the model
     mus = np.array([mu(np.mean(b1s),
                        np.mean(b2s),
@@ -651,23 +727,35 @@ def plot_psp_overplot_linlin(add_bg_term=True,
                                            duty_dayss*24,
                                            prob_coverage=0.9)
     ax.scatter(dates,detecteds/duty_dayss,
-              c="red",s=1,zorder=100,label="PSP detections")
+              c="orangered",s=0.6,zorder=100,label="PSP detections")
 
     # Calculate and plot scatter points' errorbars
     scatter_points_errors = get_detection_errors(detecteds)
     ax.errorbar(dates, detecteds/duty_dayss,
                scatter_points_errors/duty_dayss,
-               c="red", lw=0., elinewidth=0.2,alpha=0.2)
+               c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
 
     # Plot model line
     mean_expected_counts = mus*24*duty_dayss
     eff_rate = mean_expected_counts/duty_dayss
-    ax.plot(dates,eff_rate,
-           c="blue",lw=0.5,zorder=101,
-           label=f"{0.59}x SolO model")
+    for i, chunk in enumerate(chunks):
+        if i == 0:
+            label = f"{0.59}x SolO model"
+        else:
+            label = None
+        ax.plot(dates[chunk],
+                eff_rate[chunk],
+                c="navy",lw=moldel_lw,zorder=101,
+                label=label)
 
     ax.set_ylabel("Rate [/24h equiv.]")
-    ax.set_ylim(0,ymax)
+    if log:
+        ax.set_ylim(10,ymax)
+        ax.set_yscale('log')
+    else:
+        ax.set_ylim(0,ymax)
+    ax.legend(loc=2, frameon=True,
+              facecolor='white', edgecolor='black').set_zorder(200)
     fig.tight_layout()
     if title is not None:
         fig.suptitle(title)
@@ -721,8 +809,42 @@ if __name__ == "__main__":
         title="PSP: SolO model no bg, shield + bound fit INLA to r>0.5")
     """
 
-    plot_psp_overplot_linlin()
-    plot_psp_overplot_linlin(ymax=500,min_heliocentric=0.5)
+    zoom_plot_maxima()
+    zoom_plot_maxima(add_bg_term=False,
+                     shield_compensation=0.3,
+                     add_bound=2.5)
+
+
+
+    plot_psp_overplot_linlin(moldel_lw=0.3)
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3)
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             add_bg_term=False)
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             add_bg_term=False,
+                             shield_compensation=0.5)
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             add_bg_term=False,
+                             shield_compensation=0.3,
+                             add_bound=2.5)
+
+
+
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+                             add_bg_term=False)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+                             add_bg_term=False,
+                             shield_compensation=0.5)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+                             add_bg_term=False,
+                             shield_compensation=0.3,
+                             add_bound=2.5)
+
 
 
 
