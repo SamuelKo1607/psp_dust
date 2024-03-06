@@ -33,7 +33,8 @@ def mu(b1, b2, c1, c2, v1,
        shield_compensation=None,
        bound_r_exponent=-1.3,
        area_front=6.11,
-       area_side=4.62):
+       area_side=4.62,
+       bound_beta=0):
     """
     The legacy detection rate, as in A&A 2023. 
 
@@ -68,6 +69,9 @@ def mu(b1, b2, c1, c2, v1,
     area_side : float
         Lateral projection area of the spacecraft [m^2]. 
         The default is 4.62, i.e. PSP lateral projection.
+    bound_beta : float, >=0
+        The beta value for the bound grains. This is important for setting 
+        the circular speed of the grains. The default is 0.
 
     Returns
     -------
@@ -92,11 +96,12 @@ def mu(b1, b2, c1, c2, v1,
         rate_beta *= area_coeff
 
     # bound
+    bound_speed_at_1au = 29.8*np.sqrt(1-bound_beta)
     if add_bound is None:
         rate_bound = 0
     else:
         v_front_bound = -vr
-        v_side_bound = ((29.8/r)-vt)
+        v_side_bound = ((bound_speed_at_1au/r)-vt)
         rate_bound = (
                         ((v_front_bound**2+v_side_bound**2)**0.5)/50
                     )**(b1)*r**(bound_r_exponent)*add_bound
@@ -110,7 +115,7 @@ def mu(b1, b2, c1, c2, v1,
             rate_bound *= area_coeff
 
     rate = rate_beta + rate_bound
-    return rate
+    return rate #[rate, v_front_bound, v_side_bound, vt]
 
 
 def get_poisson_range(mus,
@@ -554,7 +559,33 @@ def zoom_plot_maxima(max_perihelia=16,
                      add_bg_term=True,
                      shield_compensation=1,
                      add_bound=None,
-                     aspect=1.5):
+                     aspect=1.5,
+                     split=False):
+    """
+    A procedure to plot the zoom / crop on the maxima, i.e. near perihelia. 
+
+    Parameters
+    ----------
+    max_perihelia : int, optional
+        How many perihelia to show, counting from the first. 
+        The default is 16.
+    add_bg_term : bool, optional
+        Whether to include SolO bg term. The default is True.
+    shield_compensation : float, optional
+        How sensitive the front side is. The default is 1.
+    add_bound : float or None, optional
+        How much bound dust should be added. The default is None.
+    aspect : float, optional
+        The aspect ratio of the plot. The default is 1.5.
+    split : bool, optional
+        Whether to split the fit line into bound dust and beta or not. 
+        The default is False.
+
+    Returns
+    -------
+    None.
+
+    """
 
     # Getting the approaches
     approaches = np.linspace(1,16,16,dtype=int)
@@ -576,29 +607,42 @@ def zoom_plot_maxima(max_perihelia=16,
     dates = np.array([ob.date for ob in psp_obs])
 
     # Evaluate the model
-    mus = np.array([mu(np.mean(b1s),
-                       np.mean(b2s),
-                       np.mean(c1s),
-                       np.mean(c2s)*add_bg_term,
-                       np.mean(v1s),
-                       ob.heliocentric_distance,
-                       ob.heliocentric_radial_speed,
-                       ob.heliocentric_tangential_speed,
-                       add_bound,
-                       shield_compensation=shield_compensation)
-                    for ob in psp_obs])*0.59
+    mus_beta = np.array([mu(np.mean(b1s),
+                           np.mean(b2s),
+                           np.mean(c1s),
+                           np.mean(c2s)*add_bg_term,
+                           np.mean(v1s),
+                           ob.heliocentric_distance,
+                           ob.heliocentric_radial_speed,
+                           ob.heliocentric_tangential_speed,
+                           None,
+                           shield_compensation=shield_compensation)
+                        for ob in psp_obs])*0.59
+
+    mus_bound = np.array([mu(np.mean(b1s),
+                           np.mean(b2s),
+                           0,
+                           0,
+                           np.mean(v1s),
+                           ob.heliocentric_distance,
+                           ob.heliocentric_radial_speed,
+                           ob.heliocentric_tangential_speed,
+                           add_bound,
+                           shield_compensation=shield_compensation)
+                        for ob in psp_obs])*0.59
 
     # Calculate the scatter plot
     detecteds = np.array([ob.count_corrected for ob in psp_obs])
     duty_dayss = np.array([ob.duty_hours/(24) for ob in psp_obs])
-    lower_ok, upper_ok = get_poisson_range(mus,
-                                           duty_dayss*24,
-                                           prob_coverage=0.9)
     scatter_points_errors = get_detection_errors(detecteds)
 
-    # Caluclate the model line
-    mean_expected_counts = mus*24*duty_dayss
+    # Caluclate the model lines for beta and bound
+    mean_expected_counts = (mus_beta+mus_bound)*24*duty_dayss
     eff_rate = mean_expected_counts/duty_dayss
+    mean_expected_counts_beta = (mus_beta)*24*duty_dayss
+    eff_rate_beta = mean_expected_counts_beta/duty_dayss
+    mean_expected_count_bound = (mus_bound)*24*duty_dayss
+    eff_rate_bound = mean_expected_count_bound/duty_dayss
 
     # Iterate the groups
     for group in set(approach_groups):
@@ -609,6 +653,8 @@ def zoom_plot_maxima(max_perihelia=16,
 
         line_hourdiff = np.zeros(0)
         line_rate = np.zeros(0)
+        line_rate_beta = np.zeros(0)
+        line_rate_bound = np.zeros(0)
 
         for approach_date in approach_dates[approach_groups==group]:
             filtered_indices = np.abs(dates-approach_date
@@ -619,7 +665,7 @@ def zoom_plot_maxima(max_perihelia=16,
             ax.scatter(hourdiff,
                        (detecteds[filtered_indices]
                         /duty_dayss[filtered_indices]),
-                      c="orangered",s=0.6,zorder=100,label="PSP detections")
+                      c="orangered",s=1,zorder=100)
             ax.errorbar(hourdiff,
                         (detecteds[filtered_indices]
                          /duty_dayss[filtered_indices]),
@@ -629,11 +675,26 @@ def zoom_plot_maxima(max_perihelia=16,
                          /duty_dayss[filtered_indices]),
                        c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
             line_hourdiff = np.append(line_hourdiff,hourdiff)
-            line_rate = np.append(line_rate,eff_rate[filtered_indices])
+            line_rate = np.append(line_rate,
+                                  eff_rate[filtered_indices])
+            line_rate_beta = np.append(line_rate_beta,
+                                       eff_rate_beta[filtered_indices])
+            line_rate_bound = np.append(line_rate_bound,
+                                       eff_rate_bound[filtered_indices])
         sortmask = line_hourdiff.argsort()
-        ax.plot(line_hourdiff[sortmask],
-                line_rate[sortmask],
-                c="navy",lw=0.5,zorder=101)
+        if not split:
+            ax.plot(line_hourdiff[sortmask][1::2],
+                    line_rate[sortmask][1::2],
+                    c="navy",lw=0.5,zorder=101)
+        else:
+            ax.plot(line_hourdiff[sortmask][1::2],
+                    line_rate_beta[sortmask][1::2],
+                    c="darkviolet",lw=0.5,zorder=101,label="Beta")
+            ax.plot(line_hourdiff[sortmask][1::2],
+                    line_rate_bound[sortmask][1::2],
+                    c="olivedrab",lw=0.5,zorder=101,label="Bound")
+            ax.legend(loc=2)
+        ax.set_ylim(bottom=0)
         fig.show()
 
 
@@ -765,6 +826,88 @@ def plot_psp_overplot_linlin(add_bg_term=True,
     fig.show()
 
 
+def compare_count_profiles_bound(perihelion=8,
+                                 betas=[0.,0.6,0.7,0.8,0.9],
+                                 days_window=14,
+                                 filename="bound_perihelion_beta_comparison"):
+    """
+    A procedure to compare the bound dust fluxes given beta, which 
+    prescribes the circular speed of the grains.
+
+    Parameters
+    ----------
+    perihelion : int, optional
+        Which preihelion we want to see. The default is 8.
+    betas : list of float, optional
+        The beta values to inspect. 
+        The default is [0.,0.6,0.7,0.8,0.9].
+    days_window : int, optional
+        How many days to show at once, centered on the perihelions. 
+        The default is 14.
+    filename : str, optional
+        The name of the file to save. 
+        The default is "bound_perihelion_beta_comparison".
+
+    Returns
+    -------
+    None.
+
+    """
+
+    # Getting the approaches
+    approach_dates = np.array([jd2date(a)
+                                  for a
+                                  in get_approaches(psp_ephemeris_file)
+                                  ][:perihelion+2])
+    date_of_interest = approach_dates[perihelion]
+
+    # Reading INLA output
+    psp_obs = load_all_obs(all_obs_location)
+    psp_obs = [ob for ob in psp_obs
+               if ob.duty_hours > 0
+               and np.abs(ob.date-date_of_interest)<dt.timedelta(
+                   days=days_window//2)]
+    dates = np.array([ob.date for ob in psp_obs])
+
+    # Plot and cycle throught the betas
+    fig, ax = plt.subplots(figsize=(4, 4/1.5))
+    ax.set_ylabel("Normalized rate [arb. u.]")
+    ax.set_xlabel("Time after the perihelion [h]")
+    fig.suptitle(f"Perihelion {perihelion}")
+
+    datediff = dates-date_of_interest
+    hourdiff = [24*d.days + d.seconds/3600
+                for d in datediff]
+    for beta in betas:
+        mus_bound = np.array([mu(2.036,
+                               0,
+                               0,
+                               0,
+                               1,
+                               ob.heliocentric_distance,
+                               ob.heliocentric_radial_speed,
+                               ob.heliocentric_tangential_speed,
+                               1,
+                               bound_beta=beta)
+                            for ob in psp_obs])*0.59*8
+        ax.plot(hourdiff,
+                mus_bound/np.max(mus_bound),
+                lw=1,zorder=101,label=fr"$\beta = $ {beta}")
+
+    ax.legend(loc=2)
+    ax.set_ylim(bottom=0)
+
+    if filename is not None:
+        fig.savefig(figures_location+filename+".png",dpi=1200)
+
+    fig.show()
+
+
+
+
+
+
+
 
 
 #%%
@@ -809,10 +952,16 @@ if __name__ == "__main__":
         title="PSP: SolO model no bg, shield + bound fit INLA to r>0.5")
     """
 
+    compare_count_profiles_bound()
+
     zoom_plot_maxima()
     zoom_plot_maxima(add_bg_term=False,
                      shield_compensation=0.3,
                      add_bound=2.5)
+    zoom_plot_maxima(add_bg_term=False,
+                     shield_compensation=0.3,
+                     add_bound=2.5,
+                     split=True)
 
 
 
@@ -829,22 +978,24 @@ if __name__ == "__main__":
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
+                             shield_compensation=0.3)
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             add_bg_term=False,
                              shield_compensation=0.3,
                              add_bound=2.5)
 
 
 
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
                              add_bg_term=False)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
                              add_bg_term=False,
                              shield_compensation=0.5)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.3,log=True,
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
                              add_bg_term=False,
                              shield_compensation=0.3,
                              add_bound=2.5)
-
-
 
 
