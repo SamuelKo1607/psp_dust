@@ -285,7 +285,7 @@ def get_approaches(ephem_file,
      f_v_phi,
      f_v_theta) = fetch_heliocentric(ephem_file)
 
-    jd_resampled = np.arange(min(jd),max(jd),1/1440)
+    jd_resampled = np.arange(min(jd),max(jd),1/2880)
     r_resampled = f_hel_r(jd_resampled)
     local_minima = argrelextrema(r_resampled, np.less)[0]
     approaches = jd_resampled[local_minima[r_resampled[local_minima]<distance]]
