@@ -5,6 +5,7 @@ import numpy as np
 
 from load_data import Observation
 from load_data import load_list
+from overplot_with_solo_result import get_poisson_range
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -16,14 +17,20 @@ from paths import all_obs_location
 
 def plot_simple_flux(all_obs):
 
-    dates = [o.date for o in all_obs]
-    rates = [o.rate_ucc for o in all_obs]
-    colors = [f"C{o.encounter_group}" for o in all_obs]
+    dates = np.array([o.date for o in all_obs if o.rate_ucc>0])
+    rates = np.array([o.rate_ucc for o in all_obs if o.rate_ucc>0])
+    duties = np.array([o.duty_hours for o in all_obs if o.rate_ucc>0])
+    colors = [f"C{o.encounter_group}" for o in all_obs if o.rate_ucc>0]
+
+    lowers,uppers = get_poisson_range(3600*rates,duties,0.9)
 
     fig,ax = plt.subplots()
     ax.scatter(dates,rates,
-               s=0.3,edgecolors="none",color=colors)
+               s=0.8,edgecolors="none",color=colors)
+    ax.vlines(dates,lowers/(3600*duties),uppers/(3600*duties),
+              lw=0.4,color=colors,alpha=0.4)
     ax.set_ylabel("Impact rate [/s]")
+    ax.set_ylim(bottom=0)
     fig.show()
     plt.savefig(figures_location+'flux_corrected.png', format='png', dpi=600)
 
