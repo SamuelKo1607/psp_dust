@@ -101,7 +101,7 @@ def mu(b1, b2, c1, c2, v1,
         rate_bound = 0
     else:
         v_front_bound = -vr
-        v_side_bound = ((bound_speed_at_1au/r)-vt)
+        v_side_bound = ((bound_speed_at_1au/np.sqrt(r))-vt)
         rate_bound = (
                         ((v_front_bound**2+v_side_bound**2)**0.5)/50
                     )**(b1)*r**(bound_r_exponent)*add_bound
@@ -560,7 +560,9 @@ def zoom_plot_maxima(max_perihelia=16,
                      shield_compensation=1,
                      add_bound=None,
                      aspect=1.5,
-                     split=False):
+                     split=False,
+                     bound_beta=0,
+                     filename=None):
     """
     A procedure to plot the zoom / crop on the maxima, i.e. near perihelia. 
 
@@ -580,6 +582,12 @@ def zoom_plot_maxima(max_perihelia=16,
     split : bool, optional
         Whether to split the fit line into bound dust and beta or not. 
         The default is False.
+    bound_beta : float, optional
+        The beta value for bound dust, fed into mu(). 
+        The default is 0, that is macroscopic dust.
+    filename : str, optional
+        The filename of the .png to be saved. the default is None, in which
+        case, the plot is not saved.
 
     Returns
     -------
@@ -616,7 +624,8 @@ def zoom_plot_maxima(max_perihelia=16,
                            ob.heliocentric_radial_speed,
                            ob.heliocentric_tangential_speed,
                            None,
-                           shield_compensation=shield_compensation)
+                           shield_compensation=shield_compensation,
+                           bound_beta=bound_beta)
                         for ob in psp_obs])*0.59
 
     mus_bound = np.array([mu(np.mean(b1s),
@@ -628,7 +637,8 @@ def zoom_plot_maxima(max_perihelia=16,
                            ob.heliocentric_radial_speed,
                            ob.heliocentric_tangential_speed,
                            add_bound,
-                           shield_compensation=shield_compensation)
+                           shield_compensation=shield_compensation,
+                           bound_beta=bound_beta)
                         for ob in psp_obs])*0.59
 
     # Calculate the scatter plot
@@ -644,58 +654,69 @@ def zoom_plot_maxima(max_perihelia=16,
     mean_expected_count_bound = (mus_bound)*24*duty_dayss
     eff_rate_bound = mean_expected_count_bound/duty_dayss
 
+    # Plot
+    fig, axes = plt.subplots(nrows=2,ncols=3,figsize=(9, 6))
+    for a in axes[:,0]:
+        a.set_ylabel("Rate [/24h equiv.]")
+    for a in axes[1,:]:
+        a.set_xlabel("Time after perihelion [h]")
+
     # Iterate the groups
-    for group in set(approach_groups):
-        fig, ax = plt.subplots(figsize=(4, 4/aspect))
-        ax.set_ylabel("Rate [/24h equiv.]")
-        ax.set_xlabel("Time after perihelia [h]")
-        fig.suptitle(f"Encounter group {group}")
+    for i,ax in np.ndenumerate(axes):
+        group = i[0]*np.shape(axes)[1]+i[1]+1
+        if group in set(approach_groups):
 
-        line_hourdiff = np.zeros(0)
-        line_rate = np.zeros(0)
-        line_rate_beta = np.zeros(0)
-        line_rate_bound = np.zeros(0)
+            ax.set_title(f"Enc. group {group}")
 
-        for approach_date in approach_dates[approach_groups==group]:
-            filtered_indices = np.abs(dates-approach_date
-                                      )<dt.timedelta(days=7)
-            datediff = dates[filtered_indices]-approach_date
-            hourdiff = [24*d.days + d.seconds/3600
-                        for d in datediff]
-            ax.scatter(hourdiff,
-                       (detecteds[filtered_indices]
-                        /duty_dayss[filtered_indices]),
-                      c="orangered",s=1,zorder=100)
-            ax.errorbar(hourdiff,
-                        (detecteds[filtered_indices]
-                         /duty_dayss[filtered_indices]),
-                        (np.array([scatter_points_errors[0,filtered_indices],
-                                   scatter_points_errors[1,filtered_indices]
-                                   ])
-                         /duty_dayss[filtered_indices]),
-                       c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
-            line_hourdiff = np.append(line_hourdiff,hourdiff)
-            line_rate = np.append(line_rate,
-                                  eff_rate[filtered_indices])
-            line_rate_beta = np.append(line_rate_beta,
-                                       eff_rate_beta[filtered_indices])
-            line_rate_bound = np.append(line_rate_bound,
-                                       eff_rate_bound[filtered_indices])
-        sortmask = line_hourdiff.argsort()
-        if not split:
+            line_hourdiff = np.zeros(0)
+            line_rate = np.zeros(0)
+            line_rate_beta = np.zeros(0)
+            line_rate_bound = np.zeros(0)
+
+            for approach_date in approach_dates[approach_groups==group]:
+                filtered_indices = np.abs(dates-approach_date
+                                          )<dt.timedelta(days=7)
+                datediff = dates[filtered_indices]-approach_date
+                hourdiff = [24*d.days + d.seconds/3600
+                            for d in datediff]
+                ax.scatter(hourdiff,
+                           (detecteds[filtered_indices]
+                            /duty_dayss[filtered_indices]),
+                          c="orangered",s=1,zorder=100)
+                ax.errorbar(hourdiff,
+                            (detecteds[filtered_indices]
+                             /duty_dayss[filtered_indices]),
+                            (np.array([scatter_points_errors[0,filtered_indices],
+                                       scatter_points_errors[1,filtered_indices]
+                                       ])
+                             /duty_dayss[filtered_indices]),
+                           c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
+                line_hourdiff = np.append(line_hourdiff,hourdiff)
+                line_rate = np.append(line_rate,
+                                      eff_rate[filtered_indices])
+                line_rate_beta = np.append(line_rate_beta,
+                                           eff_rate_beta[filtered_indices])
+                line_rate_bound = np.append(line_rate_bound,
+                                           eff_rate_bound[filtered_indices])
+            sortmask = line_hourdiff.argsort()
+
             ax.plot(line_hourdiff[sortmask][1::2],
                     line_rate[sortmask][1::2],
-                    c="navy",lw=0.5,zorder=101)
-        else:
-            ax.plot(line_hourdiff[sortmask][1::2],
-                    line_rate_beta[sortmask][1::2],
-                    c="darkviolet",lw=0.5,zorder=101,label="Beta")
-            ax.plot(line_hourdiff[sortmask][1::2],
-                    line_rate_bound[sortmask][1::2],
-                    c="olivedrab",lw=0.5,zorder=101,label="Bound")
-            ax.legend(loc=2)
-        ax.set_ylim(bottom=0)
-        fig.show()
+                    c="navy",lw=1,zorder=101,label="Total")
+            if split:
+                ax.plot(line_hourdiff[sortmask][1::2],
+                        line_rate_beta[sortmask][1::2],
+                        c="darkviolet",lw=0.5,zorder=101,label="Beta")
+                ax.plot(line_hourdiff[sortmask][1::2],
+                        line_rate_bound[sortmask][1::2],
+                        c="olivedrab",lw=0.5,zorder=101,label="Bound")
+                ax.legend(loc=2)
+            ax.set_ylim(bottom=0)
+
+    if filename is not None:
+        fig.savefig(figures_location+filename+".png",dpi=1200)
+
+    fig.show()
 
 
 def plot_psp_overplot_linlin(add_bg_term=True,
@@ -827,8 +848,9 @@ def plot_psp_overplot_linlin(add_bg_term=True,
 
 
 def compare_count_profiles_bound(perihelion=8,
-                                 betas=[0.,0.6,0.7,0.8,0.9],
-                                 days_window=14,
+                                 betas=[-0.3,-0.15,0.,0.15,0.3],
+                                 shield_compensation=1,
+                                 days_window=10,
                                  filename="bound_perihelion_beta_comparison"):
     """
     A procedure to compare the bound dust fluxes given beta, which 
@@ -841,6 +863,8 @@ def compare_count_profiles_bound(perihelion=8,
     betas : list of float, optional
         The beta values to inspect. 
         The default is [0.,0.6,0.7,0.8,0.9].
+    shield_compensation : float, optional
+        The front side detection efficiency. The default is 1.
     days_window : int, optional
         How many days to show at once, centered on the perihelions. 
         The default is 14.
@@ -887,8 +911,10 @@ def compare_count_profiles_bound(perihelion=8,
                                ob.heliocentric_distance,
                                ob.heliocentric_radial_speed,
                                ob.heliocentric_tangential_speed,
-                               1,
-                               bound_beta=beta)
+                               add_bound = 1,
+                               shield_compensation = shield_compensation,
+                               bound_r_exponent = -1.3,
+                               bound_beta = beta)
                             for ob in psp_obs])*0.59*8
         ax.plot(hourdiff,
                 mus_bound/np.max(mus_bound),
@@ -903,15 +929,22 @@ def compare_count_profiles_bound(perihelion=8,
     fig.show()
 
 
-
-
-
-
-
-
-
-#%%
 if __name__ == "__main__":
+    pass
+
+#%% Study the perihelia profiles
+
+    compare_count_profiles_bound(perihelion=6)
+
+    compare_count_profiles_bound(perihelion=8)
+
+    compare_count_profiles_bound(perihelion=10)
+
+
+
+
+#%% Overplot the observation with model lines
+
 
     """
     plot_psp_data_solo_model(add_bg_term=True,shield_compensation=None,
@@ -950,18 +983,41 @@ if __name__ == "__main__":
         add_bound=1.73,
         filename="PSP_SolO_shield_coeff_bound_inla_fit_far",
         title="PSP: SolO model no bg, shield + bound fit INLA to r>0.5")
+    
+
+
+
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
+                             add_bg_term=False)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
+                             add_bg_term=False,
+                             shield_compensation=0.5)
+    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
+                             add_bg_term=False,
+                             shield_compensation=0.3,
+                             add_bound=2.5)
+
     """
 
-    compare_count_profiles_bound()
 
-    zoom_plot_maxima()
+
+    zoom_plot_maxima(filename="naive_overplot_zoom")
     zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.3,
-                     add_bound=2.5)
+                     shield_compensation=0.2,
+                     add_bound=5,
+                     filename="corrections_zoom")
     zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.3,
-                     add_bound=2.5,
-                     split=True)
+                     shield_compensation=0.2,
+                     add_bound=5,
+                     split=True,
+                     filename="corrections_split_zoom")
+    zoom_plot_maxima(add_bg_term=False,
+                     shield_compensation=0.5,
+                     add_bound=15,
+                     split=True,
+                     bound_beta=-0.3,
+                     filename="lower_bound_beta_split_zoom")
 
 
 
@@ -982,20 +1038,11 @@ if __name__ == "__main__":
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
-                             shield_compensation=0.3,
-                             add_bound=2.5)
+                             shield_compensation=0.2,
+                             add_bound=5)
 
 
 
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
-                             add_bg_term=False)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
-                             add_bg_term=False,
-                             shield_compensation=0.5)
-    plot_psp_overplot_linlin(ymax=5e4,moldel_lw=0.8,log=True,
-                             add_bg_term=False,
-                             shield_compensation=0.3,
-                             add_bound=2.5)
+
 
 
