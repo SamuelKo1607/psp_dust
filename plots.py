@@ -18,12 +18,16 @@ from paths import all_obs_location
 
 def plot_simple_flux(all_obs,
                      aspect=1.,
-                     zoom=0.75):
+                     zoom=0.666,
+                     colorful=True):
 
     dates = np.array([o.date for o in all_obs if o.rate_ucc>0])
     rates = np.array([o.rate_ucc for o in all_obs if o.rate_ucc>0])
     duties = np.array([o.duty_hours for o in all_obs if o.rate_ucc>0])
-    colors = [f"C{o.encounter_group}" for o in all_obs if o.rate_ucc>0]
+    if colorful:
+        colors = [f"C{o.encounter_group}" for o in all_obs if o.rate_ucc>0]
+    else:
+        colors = ["teal" for o in all_obs if o.rate_ucc>0]
 
     lowers,uppers = get_poisson_range(3600*rates,duties,0.9)
 
@@ -34,7 +38,7 @@ def plot_simple_flux(all_obs,
               lw=0.4,color=colors,alpha=0.4)
     ax.set_ylabel("Impact rate (corrected) [/day]")
     ax.set_ylim(bottom=0)
-    ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 7)))
+    ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 5, 9)))
     ax.xaxis.set_minor_locator(mdates.MonthLocator())
     ax.set_xlim(left = min(dates), right = max(dates))
     ax.tick_params(axis='x',which="minor",bottom=True,top=True)

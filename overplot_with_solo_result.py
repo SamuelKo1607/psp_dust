@@ -559,7 +559,8 @@ def zoom_plot_maxima(max_perihelia=16,
                      add_bg_term=True,
                      shield_compensation=1,
                      add_bound=None,
-                     aspect=1.5,
+                     aspect=2,
+                     zoom=1.2,
                      split=False,
                      bound_beta=0,
                      filename=None):
@@ -579,6 +580,8 @@ def zoom_plot_maxima(max_perihelia=16,
         How much bound dust should be added. The default is None.
     aspect : float, optional
         The aspect ratio of the plot. The default is 1.5.
+    zoom : float, optional
+        The zoom of the plots, higher number implies larger texts.
     split : bool, optional
         Whether to split the fit line into bound dust and beta or not. 
         The default is False.
@@ -655,15 +658,23 @@ def zoom_plot_maxima(max_perihelia=16,
     eff_rate_bound = mean_expected_count_bound/duty_dayss
 
     # Plot
-    fig, axes = plt.subplots(nrows=2,ncols=3,figsize=(9, 6))
-    for a in axes[:,0]:
+    #fig, axes = plt.subplots(nrows=2,ncols=3,figsize=(9, 6))
+    fig = plt.figure(figsize=(4*aspect/zoom, 4/zoom))
+    ax1 = plt.subplot2grid(shape=(2,6), loc=(0,0), colspan=2, fig=fig)
+    ax2 = plt.subplot2grid((2,6), (0,2), colspan=2, fig=fig)
+    ax3 = plt.subplot2grid((2,6), (0,4), colspan=2, fig=fig)
+    ax4 = plt.subplot2grid((2,6), (1,1), colspan=2, fig=fig)
+    ax5 = plt.subplot2grid((2,6), (1,3), colspan=2, fig=fig)
+    axes = np.array([ax1,ax2,ax3,ax4,ax5])
+
+    for a in axes[:]:
         a.set_ylabel("Rate [/24h equiv.]")
-    for a in axes[1,:]:
+    for a in axes[:]:
         a.set_xlabel("Time after perihelion [h]")
 
     # Iterate the groups
-    for i,ax in np.ndenumerate(axes):
-        group = i[0]*np.shape(axes)[1]+i[1]+1
+    for i,ax in enumerate(axes):  #np.ndenumerate(axes):
+        group = i+1 #i[0]*np.shape(axes)[1]+i[1]+1
         if group in set(approach_groups):
 
             ax.set_title(f"Enc. group {group}")
@@ -710,8 +721,12 @@ def zoom_plot_maxima(max_perihelia=16,
                 ax.plot(line_hourdiff[sortmask][1::2],
                         line_rate_bound[sortmask][1::2],
                         c="olivedrab",lw=0.5,zorder=101,label="Bound")
-                ax.legend(loc=2)
+                ax.legend(loc=2, fontsize="x-small", frameon=True,
+                          facecolor='white',
+                          edgecolor='black').set_zorder(200)
             ax.set_ylim(bottom=0)
+
+    fig.tight_layout()
 
     if filename is not None:
         fig.savefig(figures_location+filename+".png",dpi=1200)
@@ -1005,45 +1020,46 @@ if __name__ == "__main__":
     zoom_plot_maxima(filename="naive_overplot_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.2,
+                     shield_compensation=0.25,
                      add_bound=5,
                      split=True,
                      filename="corrections_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.5,
+                     shield_compensation=0.25,
                      add_bound=5,
                      split=True,
                      filename="corrections_split_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.5,
-                     add_bound=15,
+                     shield_compensation=0.25,
+                     add_bound=5,
                      split=True,
                      bound_beta=-0.3,
                      filename="lower_bound_beta_split_zoom")
 
 
 
-    plot_psp_overplot_linlin(moldel_lw=0.3)
-
-    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3)
-
-    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
-                             add_bg_term=False)
+    plot_psp_overplot_linlin(moldel_lw=0.3,
+                             filename="flux_basic_overplot")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
-                             add_bg_term=False,
-                             shield_compensation=0.5)
+                             filename="flux_basic_overplot_zoom")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
-                             shield_compensation=0.3)
+                             filename="flux_no_bg_overplot")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
-                             shield_compensation=0.2,
-                             add_bound=5)
+                             shield_compensation=0.25,
+                             filename="flux_no_bg_shield_overplot")
+
+    plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             add_bg_term=False,
+                             shield_compensation=0.25,
+                             add_bound=5,
+                             filename="flux_no_bg_shield_bound_overplot")
 
 
 
