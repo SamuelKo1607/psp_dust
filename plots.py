@@ -1,6 +1,7 @@
 import os
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.dates as mdates
 import numpy as np
 
 from load_data import Observation
@@ -15,7 +16,9 @@ from paths import figures_location
 from paths import all_obs_location
 
 
-def plot_simple_flux(all_obs):
+def plot_simple_flux(all_obs,
+                     aspect=1.,
+                     zoom=0.75):
 
     dates = np.array([o.date for o in all_obs if o.rate_ucc>0])
     rates = np.array([o.rate_ucc for o in all_obs if o.rate_ucc>0])
@@ -24,13 +27,23 @@ def plot_simple_flux(all_obs):
 
     lowers,uppers = get_poisson_range(3600*rates,duties,0.9)
 
-    fig,ax = plt.subplots()
-    ax.scatter(dates,rates,
+    fig,ax = plt.subplots(figsize=(2*aspect/zoom, 2/zoom))
+    ax.scatter(dates,rates*86400,
                s=0.8,edgecolors="none",color=colors)
-    ax.vlines(dates,lowers/(3600*duties),uppers/(3600*duties),
+    ax.vlines(dates,lowers/(3600*duties)*86400,uppers/(3600*duties)*86400,
               lw=0.4,color=colors,alpha=0.4)
-    ax.set_ylabel("Impact rate [/s]")
+    ax.set_ylabel("Impact rate (corrected) [/day]")
     ax.set_ylim(bottom=0)
+    ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 7)))
+    ax.xaxis.set_minor_locator(mdates.MonthLocator())
+    ax.set_xlim(left = min(dates), right = max(dates))
+    ax.tick_params(axis='x',which="minor",bottom=True,top=True)
+    xlabels = ax.get_xticklabels()
+    ax.set_xticklabels(xlabels, rotation=60,
+                       ha="right", rotation_mode='anchor')
+    ax.tick_params(labelsize="medium")
+    ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
+    fig.tight_layout()
     fig.show()
     plt.savefig(figures_location+'flux_corrected.png', format='png', dpi=600)
 
