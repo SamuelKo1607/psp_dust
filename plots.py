@@ -17,8 +17,8 @@ from paths import all_obs_location
 
 
 def plot_simple_flux(all_obs,
-                     aspect=1.,
-                     zoom=0.666,
+                     aspect=1.9,
+                     zoom=0.8,
                      colorful=True):
 
     dates = np.array([o.date for o in all_obs if o.rate_ucc>0])
@@ -33,12 +33,16 @@ def plot_simple_flux(all_obs,
 
     fig,ax = plt.subplots(figsize=(2*aspect/zoom, 2/zoom))
     ax.scatter(dates,rates*86400,
-               s=0.8,edgecolors="none",color=colors)
+               s=0.8/zoom,edgecolors="none",color=colors)
     ax.vlines(dates,lowers/(3600*duties)*86400,uppers/(3600*duties)*86400,
-              lw=0.4,color=colors,alpha=0.4)
+              lw=0.4/zoom,color=colors,alpha=0.4)
     ax.set_ylabel("Impact rate (corrected) [/day]")
     ax.set_ylim(bottom=0)
-    ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 5, 9)))
+    if aspect > 1.8:
+        ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 3, 5,
+                                                                7, 9, 11)))
+    else:
+        ax.xaxis.set_major_locator(mdates.MonthLocator(bymonth=(1, 5, 9)))
     ax.xaxis.set_minor_locator(mdates.MonthLocator())
     ax.set_xlim(left = min(dates), right = max(dates))
     ax.tick_params(axis='x',which="minor",bottom=True,top=True)
