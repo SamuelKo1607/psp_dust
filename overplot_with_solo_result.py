@@ -1003,15 +1003,19 @@ if __name__ == "__main__":
 
 
     zoom_plot_maxima(filename="naive_overplot_zoom")
-    zoom_plot_maxima(add_bg_term=False,
-                     shield_compensation=0.2,
-                     add_bound=5,
-                     filename="corrections_zoom")
+
     zoom_plot_maxima(add_bg_term=False,
                      shield_compensation=0.2,
                      add_bound=5,
                      split=True,
+                     filename="corrections_zoom")
+
+    zoom_plot_maxima(add_bg_term=False,
+                     shield_compensation=0.5,
+                     add_bound=5,
+                     split=True,
                      filename="corrections_split_zoom")
+
     zoom_plot_maxima(add_bg_term=False,
                      shield_compensation=0.5,
                      add_bound=15,
