@@ -19,8 +19,6 @@ from paths import all_obs_location
 from paths import legacy_inla_champion
 from paths import figures_location
 from paths import psp_ephemeris_file
-
-
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
 mpl.rcParams['figure.dpi'] = 600
@@ -563,6 +561,8 @@ def zoom_plot_maxima(max_perihelia=16,
                      zoom=1.2,
                      split=False,
                      bound_beta=0,
+                     pointcolor="orangered",
+                     linecolor="navy",
                      filename=None):
     """
     A procedure to plot the zoom / crop on the maxima, i.e. near perihelia. 
@@ -693,7 +693,7 @@ def zoom_plot_maxima(max_perihelia=16,
                 ax.scatter(hourdiff,
                            (detecteds[filtered_indices]
                             /duty_dayss[filtered_indices]),
-                          c="orangered",s=1,zorder=100)
+                          c=pointcolor,s=1,zorder=100)
                 ax.errorbar(hourdiff,
                             (detecteds[filtered_indices]
                              /duty_dayss[filtered_indices]),
@@ -701,7 +701,7 @@ def zoom_plot_maxima(max_perihelia=16,
                                        scatter_points_errors[1,filtered_indices]
                                        ])
                              /duty_dayss[filtered_indices]),
-                           c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
+                           c=pointcolor, lw=0., elinewidth=0.3,alpha=0.3)
                 line_hourdiff = np.append(line_hourdiff,hourdiff)
                 line_rate = np.append(line_rate,
                                       eff_rate[filtered_indices])
@@ -713,14 +713,16 @@ def zoom_plot_maxima(max_perihelia=16,
 
             ax.plot(line_hourdiff[sortmask][1::2],
                     line_rate[sortmask][1::2],
-                    c="navy",lw=1,zorder=101,label="Total")
+                    c=linecolor,lw=1,zorder=101,label="Total")
             if split:
                 ax.plot(line_hourdiff[sortmask][1::2],
                         line_rate_beta[sortmask][1::2],
-                        c="darkviolet",lw=0.5,zorder=101,label="Beta")
+                        c="darkviolet",ls="dashed",
+                        lw=0.5,zorder=101,label="Beta")
                 ax.plot(line_hourdiff[sortmask][1::2],
                         line_rate_bound[sortmask][1::2],
-                        c="olivedrab",lw=0.5,zorder=101,label="Bound")
+                        c="olivedrab",ls="dotted",
+                        lw=0.5,zorder=101,label="Bound")
                 ax.legend(loc=2, fontsize="x-small", frameon=True,
                           facecolor='white',
                           edgecolor='black').set_zorder(200)
@@ -743,6 +745,8 @@ def plot_psp_overplot_linlin(add_bg_term=True,
                              max_los_deviation=45,
                              aspect=2,
                              moldel_lw=0.8,
+                             pointcolor="orangered",
+                             linecolor="navy",
                              log=False,
                              filename=None,
                              title=None):
@@ -773,6 +777,10 @@ def plot_psp_overplot_linlin(add_bg_term=True,
         The aspect ratio of the plot. The default is 2.
     moldel_lw : float, optional
         The linewidth of the model line.
+    pointcolor : str, optional
+        The color of the points.
+    linecolor : str, optional
+        The color of the model line.
     log : bool, optional
         Whether to plot it semilogy.
     filename : str of None, optional
@@ -824,13 +832,13 @@ def plot_psp_overplot_linlin(add_bg_term=True,
                                            duty_dayss*24,
                                            prob_coverage=0.9)
     ax.scatter(dates,detecteds/duty_dayss,
-              c="orangered",s=0.6,zorder=100,label="PSP detections")
+              c=pointcolor,s=0.6,zorder=100,label="PSP detections")
 
     # Calculate and plot scatter points' errorbars
     scatter_points_errors = get_detection_errors(detecteds)
     ax.errorbar(dates, detecteds/duty_dayss,
                scatter_points_errors/duty_dayss,
-               c="orangered", lw=0., elinewidth=0.3,alpha=0.3)
+               c=pointcolor, lw=0., elinewidth=0.3,alpha=0.3)
 
     # Plot model line
     mean_expected_counts = mus*24*duty_dayss
@@ -842,7 +850,7 @@ def plot_psp_overplot_linlin(add_bg_term=True,
             label = None
         ax.plot(dates[chunk],
                 eff_rate[chunk],
-                c="navy",lw=moldel_lw,zorder=101,
+                c=linecolor,lw=moldel_lw,zorder=101,
                 label=label)
 
     ax.set_ylabel("Rate [/24h equiv.]")
@@ -1017,18 +1025,24 @@ if __name__ == "__main__":
 
 
 
-    zoom_plot_maxima(filename="naive_overplot_zoom")
+    zoom_plot_maxima(pointcolor="teal",
+                     linecolor="red",
+                     filename="naive_overplot_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
                      shield_compensation=0.25,
                      add_bound=5,
                      split=True,
+                     pointcolor="teal",
+                     linecolor="red",
                      filename="corrections_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
                      shield_compensation=0.25,
                      add_bound=5,
                      split=True,
+                     pointcolor="teal",
+                     linecolor="red",
                      filename="corrections_split_zoom")
 
     zoom_plot_maxima(add_bg_term=False,
@@ -1036,29 +1050,41 @@ if __name__ == "__main__":
                      add_bound=5,
                      split=True,
                      bound_beta=-0.3,
+                     pointcolor="teal",
+                     linecolor="red",
                      filename="lower_bound_beta_split_zoom")
 
 
 
-    plot_psp_overplot_linlin(moldel_lw=0.3,
+    plot_psp_overplot_linlin(moldel_lw=0.5,
+                             pointcolor="teal",
+                             linecolor="red",
                              filename="flux_basic_overplot")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             pointcolor="teal",
+                             linecolor="red",
                              filename="flux_basic_overplot_zoom")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
+                             pointcolor="teal",
+                             linecolor="red",
                              add_bg_term=False,
                              filename="flux_no_bg_overplot")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
                              shield_compensation=0.25,
+                             pointcolor="teal",
+                             linecolor="red",
                              filename="flux_no_bg_shield_overplot")
 
     plot_psp_overplot_linlin(ymax=600,min_heliocentric=0.3,
                              add_bg_term=False,
                              shield_compensation=0.25,
                              add_bound=5,
+                             pointcolor="teal",
+                             linecolor="red",
                              filename="flux_no_bg_shield_bound_overplot")
 
 
