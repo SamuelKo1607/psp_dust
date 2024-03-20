@@ -128,11 +128,48 @@ def instantaneous_speed(r,
 def bound_flux(r,
                v_rad,
                v_azim,
-               S,
-               C,
-               e,
-               beta,
+               S_front=6.11,
+               S_side=4.62,
+               C=5,
+               e=0,
+               beta=0,
                gamma=1.3):
+    """
+    
+
+    Parameters
+    ----------
+    r : float
+        Heliocentric distance of PSP [AU].
+    v_rad : float
+        Readial speed of PSP [km/s].
+    v_azim : float
+        Azimuthal speed of PSP [km/s].
+    S_front : float, optional
+        Surface area (front) of PSP [m^2], optional. 
+        The default is 6.11.
+    S_side : float, optional
+        Surface area (lateral) of PSP [m^2], optional. 
+        The default is 4.62.
+    C : float, optional
+        The amount of bound dust at 1AU [/m^2 /s] as detected 
+        by a stationary object, optional. 
+        The default is 5.
+    e : float, optional
+        Eccentricity of the bound dust, optional. 
+        The default is 0.
+    beta : float, optional
+        The beta value fo the bound dust, optional. 
+        The default is 0.
+    gamma : float, optional
+        The dependence of the dust density on the heliocentric distance. 
+        The default is 1.3.
+
+    Returns
+    -------
+    TBD flux as detected in that moment
+
+    """
 
     # bins of the original perihelion
     peri = possible_peri(r,e)
@@ -150,7 +187,7 @@ def bound_flux(r,
     grid_density_factor = np.average(np.diff(peri))
     # all the scalings for the density
     dust_amount = velocity_factor * distance_factor * grid_density_factor
-    # relativa radial speed (we will do the +- options later)
+    # relative radial speed (we will do the +- options later)
     relative_v_rad_single_leg = v_rad - v_rad_dust
     # relative azimuthal speed
     relative_v_azim_single_leg = v_azim - v_azim_dust
@@ -162,7 +199,19 @@ def bound_flux(r,
     relative_v_rad = np.append(relative_v_rad_single_leg,
                                -relative_v_rad_single_leg)
 
-    # to be continued
+    # to be continued (inspiration from overplots function)
+
+    rate_bound = (
+                    ((v_front_bound**2+v_side_bound**2)**0.5)/50
+                )**(b1)*r**(bound_r_exponent)*add_bound
+    if shield_compensation is None or v_front_bound<0:
+        pass
+    else:
+        area_coeff = ( np.abs(v_front_bound)*area_front*shield_compensation
+                       + np.abs(v_side_bound)*area_side
+                     ) / ( np.abs(v_front_bound)*area_front
+                           + np.abs(v_side_bound)*area_side )
+        rate_bound *= area_coeff
 
 
 
