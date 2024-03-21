@@ -130,10 +130,12 @@ def bound_flux(r,
                v_azim,
                S_front=6.11,
                S_side=4.62,
+               speed_exponent=2.04,
+               distance_exponent=-1.3,
+               miss_rate_front=0.,
                C=5,
                e=0,
-               beta=0,
-               gamma=1.3):
+               beta=0):
     """
     
 
@@ -151,6 +153,14 @@ def bound_flux(r,
     S_side : float, optional
         Surface area (lateral) of PSP [m^2], optional. 
         The default is 4.62.
+    speed_exponent : float, optional
+        The exponent on the dependence on speed
+    distance_exponent : float, optional
+        The dependence of the dust density on the heliocentric distance. 
+        The default is -1.3.
+    miss_rate_front : float, optional
+        The probability that a grain is missed if it hits the front side.
+        The default is 0.
     C : float, optional
         The amount of bound dust at 1AU [/m^2 /s] as detected 
         by a stationary object, optional. 
@@ -161,9 +171,7 @@ def bound_flux(r,
     beta : float, optional
         The beta value fo the bound dust, optional. 
         The default is 0.
-    gamma : float, optional
-        The dependence of the dust density on the heliocentric distance. 
-        The default is 1.3.
+
 
     Returns
     -------
@@ -176,42 +184,47 @@ def bound_flux(r,
     # the original perihelion speed
     v_peri = perihelion_speed(peri,e,beta)
     # the immediate dust speed, decomposed
-    v_tot_dust, v_rad_dust, v_azim_dust = instantaneous_speed(r,peri,v_peri,
-                                                              e,beta)
+    v_tot_dust, v_rad_dust, v_azim_dust = instantaneous_speed(r,peri,e,beta)
+
     # weight the amount of dust by:
-    # 1. velocity relative to periheioln veocity
+    # 1. velocity relative to periheioln veocity inverse
     velocity_factor = v_peri/v_tot_dust
     # 2. density at perihelion relative to 1AU perihelion density
-    distance_factor = peri**(-gamma)
-    # 3. density of perihelion grid
-    grid_density_factor = np.average(np.diff(peri))
+    distance_factor = peri**(distance_exponent)
+    # 3. density of the perihelion grid -
+    #        - how many particles does this one represent (volume)
+    grid_density_factor = np.average(np.diff(peri)) * peri
     # all the scalings for the density
-    dust_amount = velocity_factor * distance_factor * grid_density_factor
-    # relative radial speed (we will do the +- options later)
-    relative_v_rad_single_leg = v_rad - v_rad_dust
+    dust_factors = velocity_factor * distance_factor * grid_density_factor
+    # double the dust factors, we want to include inbound and outbound
+    dust_factors = np.append(dust_factors/2,
+                             dust_factors/2)
+    # relative radial speed (hit on front = negative rel speed)
+    relative_v_rad = np.append(v_rad - v_rad_dust,
+                               v_rad + v_rad_dust)
     # relative azimuthal speed
-    relative_v_azim_single_leg = v_azim - v_azim_dust
-    # double the perihelia array, we want to include outbound and inbound
-    peri_both_legs = np.append(peri,
-                               peri)
-    relative_v_azim = np.append(relative_v_azim_single_leg,
-                                relative_v_azim_single_leg)
-    relative_v_rad = np.append(relative_v_rad_single_leg,
-                               -relative_v_rad_single_leg)
+    relative_v_azim = np.append(v_azim - v_azim_dust,
+                                v_azim - v_azim_dust)
+    # total relative speed
+    relative_v = ((relative_v_rad**2 + relative_v_azim**2)**0.5)
+    # raw amount present to be detected
+    amount = ( C/len(peri) *
+              dust_factors *
+              (relative_v/30)**(speed_exponent) )
+    # front area not accounting for the fornt side miss rate
+    eff_area_front = S_front * relative_v_rad / relative_v
+    # introducing the miss rate and making it all positive
+    eff_area_front = ( (eff_area_front>0)*eff_area_front -
+                       (eff_area_front<0)*eff_area_front*(1-miss_rate_front) )
+    # lateral area
+    eff_area_side = np.abs( S_side * relative_v_azim / relative_v )
 
-    # to be continued (inspiration from overplots function)
+    # divide by len(peri) and not twice that, since /2 is used in dust_factors
+    rate = np.sum( amount / np.append(grid_density_factor,
+                                      grid_density_factor) *
+                  ( eff_area_front + eff_area_side ) )
 
-    rate_bound = (
-                    ((v_front_bound**2+v_side_bound**2)**0.5)/50
-                )**(b1)*r**(bound_r_exponent)*add_bound
-    if shield_compensation is None or v_front_bound<0:
-        pass
-    else:
-        area_coeff = ( np.abs(v_front_bound)*area_front*shield_compensation
-                       + np.abs(v_side_bound)*area_side
-                     ) / ( np.abs(v_front_bound)*area_front
-                           + np.abs(v_side_bound)*area_side )
-        rate_bound *= area_coeff
+    return rate
 
 
-
+print(bound_flux(1,0,0))
