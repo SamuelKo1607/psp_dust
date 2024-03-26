@@ -34,20 +34,22 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a,   shape = 2,    scale = 5e-5, log=TRUE))
+    return(dgamma(l_a,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){
-    return(dgamma(l_b,   shape = 2,    scale = 5e-5, log=TRUE))
+    return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
-    return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
+    #return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
+    return(dnorm(v_b_r,  mean  = 50.0,    sd   = 10, log=TRUE))
   }
   prior.e_v <- function(e_v=feed_x){
-    #return(dnorm(e_v,    mean  = 2.04,   sd   = 0.02, log=TRUE))
-    return(dnorm(e_v,    mean  = 1,   sd   = 0.0001, log=TRUE))
+    #return(dnorm(e_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
+    return(dnorm(e_v,    mean  = 2.2,   sd   = 0.2, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
-    return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
+    #return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.2, log=TRUE))
   }
   
   rate <- function(#covariates
@@ -121,7 +123,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
              + backside  * 1 * area_front * cos(impact_angle) 
              + area_side * sin(abs(impact_angle)) )
     
-    L_a = l_a * area * (v_factor)^e_v * (r_factor)^e_a_r
+    L_a = l_a * area * (v_factor)*e_v * (r_factor)^e_a_r
     
     #normalization to hourly rate, while L_i are in s^-1
     hourly_rate = 3600 * ( L_b + L_a )
@@ -239,12 +241,12 @@ mydata_psp$sc_id = 2
 
 mydata = rbind(mydata_solo,mydata_psp)
 
-n = length(mydata$vr)
-mydata$idx = 1:n 
+
 
 #filterinng to far-from the Sun only, SolO only
-mydata_far <- subset(mydata, r > 0.4 & sc_id == 1 & exposure > 1e-6)
-
+mydata <- subset(mydata, r > 0.4 & sc_id == 1 & exposure > 0.5)
+n = length(mydata$vr)
+mydata$idx = 1:n
 
 
 ###################################
@@ -259,9 +261,15 @@ rgen = inla.rgeneric.define(model = two_component_model,
                             area_front = mydata$area_front,
                             area_side  = mydata$area_side)
 result = inla(flux ~ -1 + f(idx, model = rgen),
-              data = mydata_far, family = "poisson", E = exposure, 
+              data = mydata, family = "poisson", E = exposure, 
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
-              safe = TRUE, verbose = TRUE)
+              control.inla=list(
+                control.vb=list(enable=FALSE) 
+              # ,strategy="laplace" # ,strategy="gaussian" # ,strategy="eb"
+              ),
+              #safe=TRUE,
+              verbose = TRUE)
+
 
 summary(result)
 
@@ -272,12 +280,12 @@ max(result$cpo$failure)       # also OK
 #save(pit, file = "998_generated\\inla\\pit.RData")
 
 #plotting histogram
-span = round(max(abs(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean),40)+0.5)
-hist(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean,
+span = round(max(abs(mydata$flux/mydata$exposure-result$summary.fitted.values$mean),40)+0.5)
+hist(mydata$flux/mydata$exposure-result$summary.fitted.values$mean,
      breaks=c(-span:span),
      main="")
 mtext(paste("residuals histogram, stdev = ",
-            as.character(sqrt(var(mydata_far$flux/mydata_far$exposure-result$summary.fitted.values$mean))),
+            as.character(sqrt(var(mydata$flux/mydata$exposure-result$summary.fitted.values$mean))),
             ", log(mlik) = ",
             result$mlik[1]), side=3)
   
@@ -309,7 +317,7 @@ par(mfrow = c(1, 1))
 ####### Rate decomposition ########
 ###################################
 
-len = length(mydata_far$Julian.date)
+len = length(mydata$Julian.date)
 total_rate = numeric(len)
 bound_rate = numeric(len)
 beta_rate = numeric(len)
@@ -328,33 +336,33 @@ for (i in 1:len) {
   particuler_beta_rates  = numeric(samples)
   for (j in 1:samples) {
     particuler_total_rates[j] <- two_component_model(cmd="rate", 
-                                           feed_c = c(mydata_far$vr[i],
-                                                      mydata_far$vt[i],
-                                                      mydata_far$r[i],
-                                                      mydata_far$area_front[i],
-                                                      mydata_far$area_side[i]),
+                                           feed_c = c(mydata$vr[i],
+                                                      mydata$vt[i],
+                                                      mydata$r[i],
+                                                      mydata$area_front[i],
+                                                      mydata$area_side[i]),
                                            feed_h = c(sample_l_a[j],
                                                       sample_l_b[j],
                                                       sample_v_b_r[j],
                                                       sample_e_v[j],
                                                       sample_e_b_r[j]))
     particuler_bound_rates[j] <- two_component_model(cmd="rate", 
-                                           feed_c = c(mydata_far$vr[i],
-                                                      mydata_far$vt[i],
-                                                      mydata_far$r[i],
-                                                      mydata_far$area_front[i],
-                                                      mydata_far$area_side[i]),
+                                           feed_c = c(mydata$vr[i],
+                                                      mydata$vt[i],
+                                                      mydata$r[i],
+                                                      mydata$area_front[i],
+                                                      mydata$area_side[i]),
                                            feed_h = c(sample_l_a[j],
                                                       0,
                                                       sample_v_b_r[j],
                                                       sample_e_v[j],
                                                       sample_e_b_r[j]))
     particuler_beta_rates[j] <- two_component_model(cmd="rate", 
-                                           feed_c = c(mydata_far$vr[i],
-                                                      mydata_far$vt[i],
-                                                      mydata_far$r[i],
-                                                      mydata_far$area_front[i],
-                                                      mydata_far$area_side[i]),
+                                           feed_c = c(mydata$vr[i],
+                                                      mydata$vt[i],
+                                                      mydata$r[i],
+                                                      mydata$area_front[i],
+                                                      mydata$area_side[i]),
                                            feed_h = c(0,
                                                       sample_l_b[j],
                                                       sample_v_b_r[j],
@@ -368,7 +376,7 @@ for (i in 1:len) {
 }
 
 par(mfrow = c(1, 1))
-plot(mydata_far$flux/mydata_far$exposure, ylab="counts/E")
+plot(mydata$flux/mydata$exposure, ylab="counts/E")
 lines(result$summary.fitted.values$mean, col=2, lwd=3)
 #normalization due to random effect, has no meaning with a single spacecraft
 lines(bound_rate / total_rate * result$summary.fitted.values$mean, col=3, lwd=3)
