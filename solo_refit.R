@@ -123,7 +123,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
              + backside  * 1 * area_front * cos(impact_angle) 
              + area_side * sin(abs(impact_angle)) )
     
-    L_a = l_a * area * (v_factor)*e_v * (r_factor)^e_a_r
+    L_a = l_a * area * (v_factor)^e_v * (r_factor)^e_a_r
     
     #normalization to hourly rate, while L_i are in s^-1
     hourly_rate = 3600 * ( L_b + L_a )
