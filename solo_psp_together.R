@@ -35,10 +35,10 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){ #around 1e-4
-    return(dgamma(l_a,   shape = 50,    scale = 2e-6, log=TRUE))
+    return(dgamma(l_a,   shape = 5,    scale = 2e-5, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){ #around 1e-4
-    return(dgamma(l_b,   shape = 50,    scale = 2e-6, log=TRUE))
+    return(dgamma(l_b,   shape = 5,    scale = 2e-5, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){ #around 50
     #return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
@@ -50,11 +50,11 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   }
   prior.e_b_r <- function(e_b_r=feed_x){ #around 0.5
     #return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
-    return(dbeta(e_b_r,  shape1 = 5,  shape2 = 5, log=TRUE))
+    return(dbeta(e_b_r,  shape1 = 4,  shape2 = 4, log=TRUE))
   }
   prior.shield_miss_rate <- function(shield_miss_rate=feed_x){ #around 0.5
     #return(dnorm(shield_miss_rate,  mean  = 0.5, sd   = 0.2, log=TRUE))
-    return(dbeta(shield_miss_rate,  shape1 = 5,  shape2 = 5, log=TRUE))
+    return(dbeta(shield_miss_rate,  shape1 = 4,  shape2 = 4, log=TRUE))
   }
   
   rate <- function(#covariates
@@ -256,8 +256,10 @@ names(mydata_psp)[c(2,3,4,5,6,9,10,11,12,13,14)] = c("flux",
 mydata_psp$sc_id = 2
 mydata_psp$heat_shield = 1
 
-mydata_solo_replicated = do.call("rbind",replicate(4, mydata_solo, 
-                                                   simplify = FALSE))
+mydata_solo_replicated = do.call("rbind",replicate(1, mydata_solo, simplify = FALSE))
+#mydata_solo_replicated = do.call("rbind",replicate(4, mydata_solo, simplify = FALSE))
+#mydata_solo_replicated = do.call("rbind",replicate(20, mydata_solo, simplify = FALSE))
+
 
 mydata = rbind(mydata_solo_replicated,mydata_psp)
 
@@ -481,23 +483,23 @@ px_l_b = seq(0, max_x_prior(fx_l_b)*5, length.out = 100000)
 py_l_b = exp(prior.l_b(px_l_b))
 
 #v_b_r
-px_v_b_r = seq(min_x_prior(fx_v_b_r), 
-               max_x_prior(fx_v_b_r), length.out = 100000)
+px_v_b_r = seq(0, 
+               200, length.out = 100000)
 py_v_b_r = exp(prior.v_b_r(px_v_b_r))
 
 #e_v
-px_e_v = seq(min_x_prior(fx_e_v), 
-             max_x_prior(fx_e_v), length.out = 100000)
+px_e_v = seq(0, 
+             10, length.out = 100000)
 py_e_v = exp(prior.e_v(px_e_v))
 
 #e_b_r
-px_e_b_r = seq(min_x_prior(fx_e_b_r), 
-               max_x_prior(fx_e_b_r), length.out = 100000)
+px_e_b_r = seq(0, 
+               1, length.out = 100000)
 py_e_b_r = exp(prior.e_b_r(px_e_b_r))
 
 #shield_miss_rate
-px_shield_miss_rate = seq(min_x_prior(fx_shield_miss_rate), 
-                          max_x_prior(fx_shield_miss_rate), length.out = 100000)
+px_shield_miss_rate = seq(0, 
+                          1, length.out = 100000)
 py_shield_miss_rate = exp(prior.shield_miss_rate(px_shield_miss_rate))
 
 

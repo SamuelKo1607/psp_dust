@@ -447,8 +447,8 @@ class InlaResult:
 
     def plot_prior_posterior_natural(self,
                                      atts=None,
-                                     xrange = [[0,5e-4],
-                                               [0,5e-4],
+                                     xrange = [[0,3e-4],
+                                               [0,3e-4],
                                                [0,100],
                                                [0,4],
                                                [0,1],
@@ -526,7 +526,7 @@ if __name__ == "__main__":
     r_files = glob.glob(os.path.join("998_generated","inla",
                                      "solo_psp_together_*.RData"))
     #r_files = glob.glob(os.path.join("998_generated","inla",
-    #                                 "*totally_usable*.RData"))
+    #                                 "*champion*.RData"))
     r_filepath = r_files[-1]
     csv_input_solo_path = os.path.join("data_synced","solo_flux_readable.csv")
     csv_input_psp_path = os.path.join("data_synced","psp_flux_readable.csv")
