@@ -40,7 +40,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prior.l_b <- function(l_b=feed_x){ #around 1e-4
     return(dgamma(l_b,   shape = 50,    scale = 2e-6, log=TRUE))
   }
-  prior.v_b_r <- function(v_b_r=feed_x){ 
+  prior.v_b_r <- function(v_b_r=feed_x){ #around 50
     #return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
     return(dnorm(v_b_r,  mean  = 50.0,    sd   = 5, log=TRUE))
   }
@@ -202,9 +202,9 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   # Initial values of theta
   initial <- function(){
     #initial values set to the maxima a priori
-    return(c(log(optimize(prior.l_a, interval = c(0, 1e-2),           maximum = TRUE, tol=1e-9)$maximum),
-             log(optimize(prior.l_b, interval = c(0, 1e-2),           maximum = TRUE, tol=1e-9)$maximum),
-             optimize(prior.v_b_r,   interval = c(  0, 1000),         maximum = TRUE, tol=1e-6)$maximum,
+    return(c(log(optimize(prior.l_a,     interval = c(0, 1e-2),       maximum = TRUE, tol=1e-9)$maximum),
+             log(optimize(prior.l_b,     interval = c(0, 1e-2),       maximum = TRUE, tol=1e-9)$maximum),
+                 optimize(prior.v_b_r,   interval = c(0, 1000),       maximum = TRUE, tol=1e-6)$maximum,
              log(optimize(prior.e_v,     interval = c(0, 100),        maximum = TRUE, tol=1e-6)$maximum),
              log(optimize(prior.e_b_r,   interval = c(0, 1),          maximum = TRUE, tol=1e-6)$maximum),
              log(optimize(prior.shield_miss_rate, interval = c(0, 1), maximum = TRUE, tol=1e-6)$maximum)
@@ -312,27 +312,27 @@ mtext(paste("residuals histogram, stdev = ",
             result$mlik[1]), side=3)
   
 # Posterior means of the hyperparameters
-l_a.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
-l_b.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
-v_b_r.mean = result$summary.hyperpar$mean[3]
-e_v.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta4 for idx`)
-e_b_r.mean = result$summary.hyperpar$mean[5]
+l_a.mean =   inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
+l_b.mean =   inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
+v_b_r.mean =                                    result$summary.hyperpar$mean[3]
+e_v.mean =   inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta4 for idx`)
+e_b_r.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta5 for idx`)
 shield_miss_rate.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta6 for idx`)
 
 # Create a layout with one column and six rows
 par(mfrow = c(6, 1), mar = c(2, 2, 1, 1))
 # Plot each function in a separate row
-plot(exp(result$marginals.hyperpar$`Theta1 for idx`[1:43]),result$marginals.hyperpar$`Theta1 for idx`[44:86])
+plot( exp(result$marginals.hyperpar$`Theta1 for idx`[1:43]),result$marginals.hyperpar$`Theta1 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_a", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta2 for idx`[1:43]),result$marginals.hyperpar$`Theta2 for idx`[44:86])
+plot( exp(result$marginals.hyperpar$`Theta2 for idx`[1:43]),result$marginals.hyperpar$`Theta2 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_b", col = "red", cex = 1.5)
-plot((result$marginals.hyperpar$`Theta3 for idx`[1:43]),result$marginals.hyperpar$`Theta3 for idx`[44:86])
+plot(    (result$marginals.hyperpar$`Theta3 for idx`[1:43]),result$marginals.hyperpar$`Theta3 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "v_b_r", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
+plot( exp(result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_v", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta5 for idx`[1:43]),result$marginals.hyperpar$`Theta5 for idx`[44:86])
+plot( exp(result$marginals.hyperpar$`Theta5 for idx`[1:43]),result$marginals.hyperpar$`Theta5 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_b_r", col = "red", cex = 1.5)
-plot(exp(result$marginals.hyperpar$`Theta6 for idx`[1:43]),result$marginals.hyperpar$`Theta6 for idx`[44:86])
+plot( exp(result$marginals.hyperpar$`Theta6 for idx`[1:43]),result$marginals.hyperpar$`Theta6 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "shield_miss_rate", col = "red", cex = 1.5)
 # Reset the layout to the default (1x1)
 par(mfrow = c(1, 1))
@@ -351,7 +351,7 @@ samples = 100
 s = inla.hyperpar.sample(samples, result)
 sample_l_a   =            exp(s[,1])
 sample_l_b   =            exp(s[,2])
-sample_v_b_r =            s[,3]
+sample_v_b_r =                s[,3]
 sample_e_v =              exp(s[,4])
 sample_e_b_r =            exp(s[,5])
 sample_shield_miss_rate = exp(s[,6])
@@ -430,46 +430,49 @@ legend(0, 50, legend=c("total", "bound", "beta"),
 
 #posteriors to be saved in X/Y form
 #l_a
-fx_l_a = exp(result$marginals.hyperpar$`Theta1 for idx`[1:43])
-fy_l_a = result$marginals.hyperpar$`Theta1 for idx`[44:86]
+fx_l_a =   exp(result$marginals.hyperpar$`Theta1 for idx`[1:43])
+fy_l_a =       result$marginals.hyperpar$`Theta1 for idx`[44:86]
 #l_b
-fx_l_b = exp(result$marginals.hyperpar$`Theta2 for idx`[1:43])
-fy_l_b = result$marginals.hyperpar$`Theta2 for idx`[44:86]
+fx_l_b =   exp(result$marginals.hyperpar$`Theta2 for idx`[1:43])
+fy_l_b =       result$marginals.hyperpar$`Theta2 for idx`[44:86]
 #v_b_r
-fx_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[1:43]
-fy_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[44:86]
+fx_v_b_r =     result$marginals.hyperpar$`Theta3 for idx`[1:43]
+fy_v_b_r =     result$marginals.hyperpar$`Theta3 for idx`[44:86]
 #e_v
-fx_e_v = exp(result$marginals.hyperpar$`Theta4 for idx`[1:43])
-fy_e_v = result$marginals.hyperpar$`Theta4 for idx`[44:86]
+fx_e_v =   exp(result$marginals.hyperpar$`Theta4 for idx`[1:43])
+fy_e_v =       result$marginals.hyperpar$`Theta4 for idx`[44:86]
 #e_b_r
 fx_e_b_r = exp(result$marginals.hyperpar$`Theta5 for idx`[1:43])
-fy_e_b_r = result$marginals.hyperpar$`Theta5 for idx`[44:86]
+fy_e_b_r =     result$marginals.hyperpar$`Theta5 for idx`[44:86]
 #shield_miss_rate
 fx_shield_miss_rate = exp(result$marginals.hyperpar$`Theta6 for idx`[1:43])
-fy_shield_miss_rate = result$marginals.hyperpar$`Theta6 for idx`[44:86]
+fy_shield_miss_rate =     result$marginals.hyperpar$`Theta6 for idx`[44:86]
 
 #priors to be saved in X/Y form
 
 #log priors extracted
-prior.l_a <- function(x){
-  return((two_component_model(cmd="prior.l_a",    feed_x=x))) }
-prior.l_b   <- function(x){
-  return((two_component_model(cmd="prior.l_b",    feed_x=x))) }
-prior.v_b_r <- function(x){
-  return((two_component_model(cmd="prior.v_b_r",  feed_x=x))) }
-prior.e_v   <- function(x){
-  return((two_component_model(cmd="prior.e_v",  feed_x=x))) }
-prior.e_b_r   <- function(x){
-  return((two_component_model(cmd="prior.e_b_r",  feed_x=x))) }
+prior.l_a                <- function(x){
+  return((two_component_model(cmd="prior.l_a",               feed_x=x))) }
+prior.l_b                <- function(x){
+  return((two_component_model(cmd="prior.l_b",               feed_x=x))) }
+prior.v_b_r              <- function(x){
+  return((two_component_model(cmd="prior.v_b_r",             feed_x=x))) }
+prior.e_v                <- function(x){
+  return((two_component_model(cmd="prior.e_v",               feed_x=x))) }
+prior.e_b_r              <- function(x){
+  return((two_component_model(cmd="prior.e_b_r",             feed_x=x))) }
 prior.shield_miss_rate   <- function(x){
   return((two_component_model(cmd="prior.shield_miss_rate",  feed_x=x))) }
 
 #priors evaluated
-#l_a
 min_x_prior <- function(x_span_posterior,margin=5) {
-  result <- min(x_span_posterior)-margin*(max(x_span_posterior)-min(x_span_posterior)) }
+  result <- min(x_span_posterior)-margin*(max(x_span_posterior)
+                                          -min(x_span_posterior)) }
 max_x_prior <- function(x_span_posterior,margin=5) {
-  result <- max(x_span_posterior)+margin*(max(x_span_posterior)-min(x_span_posterior)) }
+  result <- max(x_span_posterior)+margin*(max(x_span_posterior)
+                                          -min(x_span_posterior)) }
+
+#l_a
 px_l_a = seq(0, max_x_prior(fx_l_a)*5, length.out = 100000)
 py_l_a = exp(prior.l_a(px_l_a))
 
