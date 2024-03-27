@@ -34,25 +34,25 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   envir <- parent.env(environment())
   prec.high = exp(15)
   
-  prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a,   shape = 5,    scale = 1e-5, log=TRUE))
+  prior.l_a <- function(l_a=feed_x){ #around 1e-4
+    return(dgamma(l_a,   shape = 50,    scale = 2e-6, log=TRUE))
   }
-  prior.l_b <- function(l_b=feed_x){
-    return(dgamma(l_b,   shape = 5,    scale = 1e-5, log=TRUE))
+  prior.l_b <- function(l_b=feed_x){ #around 1e-4
+    return(dgamma(l_b,   shape = 50,    scale = 2e-6, log=TRUE))
   }
-  prior.v_b_r <- function(v_b_r=feed_x){
+  prior.v_b_r <- function(v_b_r=feed_x){ 
     #return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
     return(dnorm(v_b_r,  mean  = 50.0,    sd   = 5, log=TRUE))
   }
-  prior.e_v <- function(e_v=feed_x){
+  prior.e_v <- function(e_v=feed_x){ #around 1
     #return(dnorm(e_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
-    return(dnorm(e_v,    mean  = 2.2,   sd   = 0.2, log=TRUE))
+    return(dgamma(e_v,   shape = 5,    scale = 2e-1, log=TRUE))
   }
-  prior.e_b_r <- function(e_b_r=feed_x){
+  prior.e_b_r <- function(e_b_r=feed_x){ #around 0.5
     #return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
-    return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.2, log=TRUE))
+    return(dbeta(e_b_r,  shape1 = 5,  shape2 = 5, log=TRUE))
   }
-  prior.shield_miss_rate <- function(shield_miss_rate=feed_x){
+  prior.shield_miss_rate <- function(shield_miss_rate=feed_x){ #around 0.5
     #return(dnorm(shield_miss_rate,  mean  = 0.5, sd   = 0.2, log=TRUE))
     return(dbeta(shield_miss_rate,  shape1 = 5,  shape2 = 5, log=TRUE))
   }
@@ -84,7 +84,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     }
 
     #beta meteoroid contribution
-    ksi = -2 - e_b_r
+    ksi = -2 - (-1.5-e_b_r)
     r_factor = r_sc/1
     v_factor = ( (
         ( v_sc_r - ( v_b_r*(r_factor^ksi)  ) )^2 
@@ -109,7 +109,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                   * area_front * cos(impact_angle) 
                + area_side * sin(abs(impact_angle)) )
     
-    L_b = l_b * area * (v_factor)^e_v * (r_factor)^e_b_r 
+    L_b = l_b * area * (v_factor)^(e_v+1) * (r_factor)^(-1.5-e_b_r)
     
     #bound dust contribution
     ksi = -2 - e_a_r
@@ -134,7 +134,7 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
                   * area_front * cos(impact_angle) 
                + area_side * sin(abs(impact_angle)) )
     
-    L_a = l_a * area * (v_factor)^e_v * (r_factor)^e_a_r
+    L_a = l_a * area * (v_factor)^(e_v+1) * (r_factor)^e_a_r
     
     #normalization to hourly rate, while L_i are in s^-1
     hourly_rate = 3600 * ( L_b + L_a )
@@ -144,11 +144,11 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   
   
   interpret.theta <- function(){
-    return(list(l_a   = exp(theta[1L]),
-                l_b   = exp(theta[2L]),
-                v_b_r = theta[3L],
-                e_v   = theta[4L], 
-                e_b_r = theta[5L],
+    return(list(l_a   =            exp(theta[1L]),
+                l_b   =            exp(theta[2L]),
+                v_b_r =            theta[3L],
+                e_v   =            exp(theta[4L]), 
+                e_b_r =            exp(theta[5L]),
                 shield_miss_rate = exp(theta[6L])
                ))
   }
@@ -191,8 +191,8 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
     val <- (prior.l_a(              par$l_a)     + theta[1L] +
             prior.l_b(              par$l_b)     + theta[2L] +
             prior.v_b_r(            par$v_b_r)   + 
-            prior.e_v(              par$e_v)     + 
-            prior.e_b_r(            par$e_b_r)   +
+            prior.e_v(              par$e_v)     + theta[4L] +
+            prior.e_b_r(            par$e_b_r)   + theta[5L] +
             prior.shield_miss_rate( par$shield_miss_rate) + theta[6L]
            )
   
@@ -202,12 +202,12 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   # Initial values of theta
   initial <- function(){
     #initial values set to the maxima a priori
-    return(c(log(optimize(prior.l_a, interval = c(0, 1e-2),   maximum = TRUE, tol=1e-9)$maximum),
-             log(optimize(prior.l_b, interval = c(0, 1e-2),   maximum = TRUE, tol=1e-9)$maximum),
-             optimize(prior.v_b_r,   interval = c(  0, 1000), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_v,     interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
-             optimize(prior.e_b_r,   interval = c(-100, 100), maximum = TRUE, tol=1e-6)$maximum,
-             log(optimize(prior.shield_miss_rate, interval = c(0, 1e-2), maximum = TRUE, tol=1e-9)$maximum)
+    return(c(log(optimize(prior.l_a, interval = c(0, 1e-2),           maximum = TRUE, tol=1e-9)$maximum),
+             log(optimize(prior.l_b, interval = c(0, 1e-2),           maximum = TRUE, tol=1e-9)$maximum),
+             optimize(prior.v_b_r,   interval = c(  0, 1000),         maximum = TRUE, tol=1e-6)$maximum,
+             log(optimize(prior.e_v,     interval = c(0, 100),        maximum = TRUE, tol=1e-6)$maximum),
+             log(optimize(prior.e_b_r,   interval = c(0, 1),          maximum = TRUE, tol=1e-6)$maximum),
+             log(optimize(prior.shield_miss_rate, interval = c(0, 1), maximum = TRUE, tol=1e-6)$maximum)
              )
           )
   }
@@ -256,7 +256,7 @@ names(mydata_psp)[c(2,3,4,5,6,9,10,11,12,13,14)] = c("flux",
 mydata_psp$sc_id = 2
 mydata_psp$heat_shield = 1
 
-mydata_solo_replicated = do.call("rbind",replicate(5, mydata_solo, 
+mydata_solo_replicated = do.call("rbind",replicate(4, mydata_solo, 
                                                    simplify = FALSE))
 
 mydata = rbind(mydata_solo_replicated,mydata_psp)
@@ -286,9 +286,10 @@ result = inla(flux ~ -1 + f(idx, model = rgen),
               control.compute = list(cpo=TRUE, dic=TRUE, config = TRUE),
               control.inla=list(
               control.vb=list(enable=FALSE) 
-              # ,strategy="laplace" # ,strategy="gaussian" # ,strategy="eb"
+              ,int.strategy="eb"  #int.strategy="grid"
+              #,strategy="adaptive" # ,strategy="gaussian"
               ),
-              safe=TRUE,
+              safe = TRUE,
               verbose = TRUE)
 
 
@@ -314,7 +315,7 @@ mtext(paste("residuals histogram, stdev = ",
 l_a.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta1 for idx`)
 l_b.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta2 for idx`)
 v_b_r.mean = result$summary.hyperpar$mean[3]
-e_v.mean = result$summary.hyperpar$mean[4]
+e_v.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta4 for idx`)
 e_b_r.mean = result$summary.hyperpar$mean[5]
 shield_miss_rate.mean = inla.emarginal(function(x) exp(x), result$marginals.hyperpar$`Theta6 for idx`)
 
@@ -327,9 +328,9 @@ plot(exp(result$marginals.hyperpar$`Theta2 for idx`[1:43]),result$marginals.hype
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "l_b", col = "red", cex = 1.5)
 plot((result$marginals.hyperpar$`Theta3 for idx`[1:43]),result$marginals.hyperpar$`Theta3 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "v_b_r", col = "red", cex = 1.5)
-plot((result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
+plot(exp(result$marginals.hyperpar$`Theta4 for idx`[1:43]),result$marginals.hyperpar$`Theta4 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_v", col = "red", cex = 1.5)
-plot((result$marginals.hyperpar$`Theta5 for idx`[1:43]),result$marginals.hyperpar$`Theta5 for idx`[44:86])
+plot(exp(result$marginals.hyperpar$`Theta5 for idx`[1:43]),result$marginals.hyperpar$`Theta5 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "e_b_r", col = "red", cex = 1.5)
 plot(exp(result$marginals.hyperpar$`Theta6 for idx`[1:43]),result$marginals.hyperpar$`Theta6 for idx`[44:86])
 text(x = par("usr")[1] + 0.05 * diff(par("usr")[1:2]), y = par("usr")[4] - 0.3 * diff(par("usr")[3:4]), labels = "shield_miss_rate", col = "red", cex = 1.5)
@@ -351,8 +352,8 @@ s = inla.hyperpar.sample(samples, result)
 sample_l_a   =            exp(s[,1])
 sample_l_b   =            exp(s[,2])
 sample_v_b_r =            s[,3]
-sample_e_v =              s[,4]
-sample_e_b_r =            s[,5]
+sample_e_v =              exp(s[,4])
+sample_e_b_r =            exp(s[,5])
 sample_shield_miss_rate = exp(s[,6])
 
 for (i in 1:len) {
@@ -438,13 +439,13 @@ fy_l_b = result$marginals.hyperpar$`Theta2 for idx`[44:86]
 fx_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[1:43]
 fy_v_b_r = result$marginals.hyperpar$`Theta3 for idx`[44:86]
 #e_v
-fx_e_v = result$marginals.hyperpar$`Theta4 for idx`[1:43]
+fx_e_v = exp(result$marginals.hyperpar$`Theta4 for idx`[1:43])
 fy_e_v = result$marginals.hyperpar$`Theta4 for idx`[44:86]
 #e_b_r
-fx_e_b_r = result$marginals.hyperpar$`Theta5 for idx`[1:43]
+fx_e_b_r = exp(result$marginals.hyperpar$`Theta5 for idx`[1:43])
 fy_e_b_r = result$marginals.hyperpar$`Theta5 for idx`[44:86]
-#e_b_r
-fx_shield_miss_rate = result$marginals.hyperpar$`Theta6 for idx`[1:43]
+#shield_miss_rate
+fx_shield_miss_rate = exp(result$marginals.hyperpar$`Theta6 for idx`[1:43])
 fy_shield_miss_rate = result$marginals.hyperpar$`Theta6 for idx`[44:86]
 
 #priors to be saved in X/Y form
@@ -508,8 +509,8 @@ s = inla.hyperpar.sample(1000000, result)
 sample_l_a   =            exp(s[,1])
 sample_l_b   =            exp(s[,2])
 sample_v_b_r =            s[,3]
-sample_e_v =              s[,4]
-sample_e_b_r =            s[,5]
+sample_e_v =              exp(s[,4])
+sample_e_b_r =            exp(s[,5])
 sample_shield_miss_rate = exp(s[,6])
 
 
