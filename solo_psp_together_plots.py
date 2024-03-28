@@ -3,9 +3,13 @@ import numpy as np
 import pandas as pd
 import glob
 from scipy import interpolate
+from scipy import stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.colors import to_rgb
 import pyreadr
+
+from conversions import jd2date
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -41,7 +45,7 @@ class InlaResult:
     def __init__(self,
                  datafile,
                  solo_csv_readable,
-                 psp_scv_readable):
+                 psp_csv_readable):
         """
         The creator for the InlaResult. Loads the RData output and 
         the csv input. 
@@ -68,7 +72,24 @@ class InlaResult:
                      "e_b_r",
                      "shield_miss_rate"]
         self.solo_input_df = pd.read_csv(solo_csv_readable)
-        self.psp_input_df = pd.read_csv(solo_csv_readable)
+        self.psp_input_df = pd.read_csv(psp_csv_readable)
+
+        """
+        solo_input_df:
+        ['Julian date', 'Fluxes [/day]', 'Radial velocity [km/s]',
+        'Tangential velocity [km/s]', 'Radial distance [au]',
+        'Detection time [hours]', 'Velocity phase angle [deg]',
+        'Velocity inclination [deg]', 'V_X (HAE) [km/s]', 'V_Y (HAE) [km/s]',
+        'V_Z (HAE) [km/s]']
+            
+        psp_input_df:
+        ['Julian date', 'Count corrected [/day]', 'Radial velocity [km/s]',
+        'Tangential velocity [km/s]', 'Radial distance [au]',
+        'Detection time [hours]', 'Velocity phase angle [deg]',
+        'Velocity inclination [deg]', 'V_X (HAE) [km/s]', 'V_Y (HAE) [km/s]',
+        'V_Z (HAE) [km/s]', 'Deviation angle [deg]', 'Area front [m^2]',
+        'Area side [m^2]']
+        """
 
 
     def inla_function(self):
@@ -118,7 +139,7 @@ class InlaResult:
         first_row = np.argmax(self.inla_function()[
                                                     "model_definition"
                                                   ].str.find(
-                                                        "rate <- function"
+                                                    "rate <- function(v_sc_r"
                                                             )>0)
 
         last_row = np.argmax(self.inla_function()[
@@ -131,10 +152,6 @@ class InlaResult:
         r_function_list = [row[0] for row in r_function]
 
         usual_r_function_list = [
-           '    prior.shield_miss_rate <- function(shield_miss_rate = feed_x) {',
-           '        return(dbeta(shield_miss_rate, shape1 = 5, shape2 = 5, ',
-           '            log = TRUE))',
-           '    }',
            '    rate <- function(v_sc_r = feed_c[1], v_sc_t = feed_c[2], ',
            '        r_sc = feed_c[3], area_front = feed_c[4], area_side = feed_c[5], ',
            '        heat_shield = feed_c[6], l_a = feed_h[1], l_b = feed_h[2], ',
@@ -263,6 +280,40 @@ class InlaResult:
 
         return usual_rate
 
+
+    def get_detection_errors(self,
+                             counts,
+                             prob_coverage = 0.9):
+        """
+        The function to calculate the errorbars for flux 
+        assuming Poisson distribution and taking into account
+        the number of detections.
+
+        Parameters
+        ----------
+        counts : array of float
+            Counts per day.
+        prob_coverage : float, optional
+            The coverage of the errobar interval. The default is 0.9.
+
+        Returns
+        -------
+        err_plusminus_flux : np.array of float
+            The errorbars, lower and upper bound, shape (2, n). 
+            The unit is [1] (count).
+
+        """
+
+        counts_err_minus = -stats.poisson.ppf(0.5-prob_coverage/2,
+                                              mu=counts)+counts
+        counts_err_plus  = +stats.poisson.ppf(0.5+prob_coverage/2,
+                                              mu=counts)-counts
+        err_plusminus_counts = np.array([counts_err_minus,
+                                       counts_err_plus])
+
+        return err_plusminus_counts
+
+
     def summary_posterior(self):
         """
         Prints a short summary (means and variances) of the posteriors
@@ -387,6 +438,110 @@ class InlaResult:
                                             bounds_error=False,
                                             fill_value=0)
         return interpolated
+
+
+    def rate_samples(self,
+                     sample_size=100):
+        """
+        Provides sampled mu matrices of shape (sample_size,len(jd)), 
+        separately for solo, psp, bound and beta.
+
+        Parameters
+        ----------
+        sample_size : int, optional
+            The sample size, i.e. the number of rows in the poutput arrays. 
+            The default is 100.
+
+        Returns
+        -------
+        solo_prediction_bound : np.array of float, 2D
+            The predicted bound component flux detection for SolO [/h].
+        solo_prediction_beta : np.array of float, 2D
+            The predicted beta component flux detection for SolO [/h].
+        psp_prediction_bound : np.array of float, 2D
+            The predicted bound component flux detection for PSP [/h].
+        psp_prediction_beta : np.array of float, 2D
+            The predicted beta component flux detection for PSP [/h].
+
+        """
+
+        sample = self.sample(sample_size=sample_size)
+        mu = self.rate_function()
+        solo_prediction_bound = np.zeros(
+            (0,len(self.solo_input_df["Julian date"])))
+        solo_prediction_beta = np.zeros(
+            (0,len(self.solo_input_df["Julian date"])))
+        psp_prediction_bound = np.zeros(
+            (0,len(self.psp_input_df["Julian date"])))
+        psp_prediction_beta = np.zeros(
+            (0,len(self.psp_input_df["Julian date"])))
+
+        for i,e in enumerate(sample[0][:]):
+            solo_prediction_bound = np.vstack((solo_prediction_bound,
+                mu(
+                    self.solo_input_df["Radial velocity [km/s]"],
+                    self.solo_input_df["Tangential velocity [km/s]"],
+                    self.solo_input_df["Radial distance [au]"],
+                    10.34 * np.ones(len(self.solo_input_df["Julian date"])),
+                    8.24  * np.ones(len(self.solo_input_df["Julian date"])),
+                    0     * np.ones(len(self.solo_input_df["Julian date"])),
+                    sample[0][i],
+                    0,
+                    sample[2][i],
+                    sample[3][i],
+                    sample[4][i],
+                    sample[5][i]
+                )))
+            solo_prediction_beta = np.vstack((solo_prediction_beta,
+                mu(
+                    self.solo_input_df["Radial velocity [km/s]"],
+                    self.solo_input_df["Tangential velocity [km/s]"],
+                    self.solo_input_df["Radial distance [au]"],
+                    10.34 * np.ones(len(self.solo_input_df["Julian date"])),
+                    8.24  * np.ones(len(self.solo_input_df["Julian date"])),
+                    0     * np.ones(len(self.solo_input_df["Julian date"])),
+                    0,
+                    sample[1][i],
+                    sample[2][i],
+                    sample[3][i],
+                    sample[4][i],
+                    sample[5][i]
+                )))
+
+            psp_prediction_bound = np.vstack((psp_prediction_bound,
+                mu(
+                    self.psp_input_df["Radial velocity [km/s]"],
+                    self.psp_input_df["Tangential velocity [km/s]"],
+                    self.psp_input_df["Radial distance [au]"],
+                    self.psp_input_df["Area front [m^2]"],
+                    self.psp_input_df["Area side [m^2]"],
+                    1 * np.ones(len(self.psp_input_df["Julian date"])),
+                    sample[0][i],
+                    0,
+                    sample[2][i],
+                    sample[3][i],
+                    sample[4][i],
+                    sample[5][i]
+                )))
+            psp_prediction_beta = np.vstack((psp_prediction_beta,
+                mu(
+                    self.psp_input_df["Radial velocity [km/s]"],
+                    self.psp_input_df["Tangential velocity [km/s]"],
+                    self.psp_input_df["Radial distance [au]"],
+                    self.psp_input_df["Area front [m^2]"],
+                    self.psp_input_df["Area side [m^2]"],
+                    1 * np.ones(len(self.psp_input_df["Julian date"])),
+                    0,
+                    sample[1][i],
+                    sample[2][i],
+                    sample[3][i],
+                    sample[4][i],
+                    sample[5][i]
+                )))
+
+        return (solo_prediction_bound, solo_prediction_beta,
+                psp_prediction_bound, psp_prediction_beta)
+
 
     def plot_prior_posterior(self,
                              atts=None,
@@ -517,6 +672,166 @@ class InlaResult:
         fig.show()
 
 
+    def overplot(self,
+                 sample_size=100,
+                 title=None):
+        """
+        A procedure to plot the detected counts under the INLA fitted rates.
+        The rates are decomposed into beta and bound. 
+
+        Parameters
+        ----------
+        sample_size : int, optional
+            The number of sampled fluxes to draw over the measured data.
+            The default is 100.
+        title : str, optional
+            The suptitle of the plot. 
+            The default is None, in which case not suptitle is used.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        fig, ax = plt.subplots(nrows=2,ncols=1,figsize=(4, 3),sharex=True)
+
+        for dataset, axis, flux_name in zip([self.solo_input_df,
+                                                 self.psp_input_df],
+                                                [ax[0],ax[1]],
+                                                ["Fluxes [/day]",
+                                                 "Count corrected [/day]"]):
+            for i,df in enumerate([
+                    dataset[dataset['Radial distance [au]'] <= 0.4],
+                    dataset[dataset['Radial distance [au]'] > 0.4]]):
+                point_errors = self.get_detection_errors(df[flux_name])
+                axis.errorbar([jd2date(jd) for jd in df["Julian date"]],
+                               df[flux_name] / df["Detection time [hours]"],
+                               np.vstack((point_errors[0]
+                                            / df["Detection time [hours]"],
+                                          point_errors[1]
+                                            / df["Detection time [hours]"]
+                               )),
+                               lw=0, elinewidth=0.4,
+                               c="lightgrey"*(i==0)+"dimgrey"*(i==1))
+
+        (solo_prediction_bound,
+         solo_prediction_beta,
+         psp_prediction_bound,
+         psp_prediction_beta) = self.rate_samples(sample_size)
+        for prediction, label, color in zip([(solo_prediction_bound
+                                               + solo_prediction_beta),
+                                             solo_prediction_bound,
+                                             solo_prediction_beta],
+                                            ["Total","Bound","Beta"],
+                                            ["black","blue","red"]):
+            ax[0].plot([jd2date(jd) for jd
+                        in self.solo_input_df["Julian date"]],
+                        np.mean(prediction, axis = 0),
+                        color=color, label=label, lw=0.5)
+        for prediction, label, color in zip([(psp_prediction_bound
+                                               + psp_prediction_beta),
+                                             psp_prediction_bound,
+                                             psp_prediction_beta],
+                                            ["Total","Bound","Beta"],
+                                            ["black","blue","red"]):
+            ax[1].plot([jd2date(jd) for jd
+                        in self.psp_input_df["Julian date"]],
+                        np.mean(prediction, axis = 0),
+                        color=color, label=label, lw=0.5)
+
+        for a in ax:
+            a.set_ylim(bottom=0)
+            a.set_ylim(top=50)
+            a.set_ylabel(r"Detection rate $[/h]$")
+            a.set
+        ax[0].legend()
+        if title is not None:
+            fig.suptitle(title)
+        fig.show()
+
+
+    def radial_fit_profile(self,
+                           sample_size=100):
+        """
+        A procedure to compare the measured points to the prediction,
+        as a function of the heliocentric distance.
+
+        Parameters
+        ----------
+        sample_size : int, optional
+            The sample size used to uvaluate the mean model. 
+            The default is 100.
+
+        Returns
+        -------
+        None.
+
+        """
+
+        fig, ax = plt.subplots(nrows=1,ncols=1,figsize=(4, 3))
+
+        self.solo_input_df['Radial distance [au]']
+        self.psp_input_df['Radial distance [au]']
+
+        (solo_prediction_bound,
+         solo_prediction_beta,
+         psp_prediction_bound,
+         psp_prediction_beta) = self.rate_samples(sample_size)
+        solo_prediction = np.mean(solo_prediction_bound
+                                  + solo_prediction_beta, axis=0)
+        psp_prediction = np.mean(psp_prediction_bound
+                                 + psp_prediction_beta, axis=0)
+
+        for (df,
+             flux_name,
+             prediction,
+             color,
+             label) in zip([self.solo_input_df,
+                            self.psp_input_df],
+                           ["Fluxes [/day]",
+                            "Count corrected [/day]"],
+                           [solo_prediction,
+                            psp_prediction],
+                           ["red",
+                            "blue"],
+                           ["SolO",
+                            "PSP"]):
+
+            ax.scatter(df['Radial distance [au]'],
+                        (df[flux_name]
+                         / df["Detection time [hours]"]
+                         / prediction),
+                        s=1, c=color, alpha=0.2, label=label)
+
+        min_r = min(self.psp_input_df['Radial distance [au]'])
+        max_r = max(self.solo_input_df['Radial distance [au]'])
+
+        ax.hlines(1,min_r,max_r,
+                  lw=1,color="black")
+        ax.set_ylabel(r"Detections / model $[1]$")
+        ax.set_xlabel(r"Heliocentric distance $[AU]$")
+        ax.set_yscale('log')
+        ax.legend()
+        fig.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 #%%
@@ -538,6 +853,10 @@ if __name__ == "__main__":
 
     result.plot_prior_posterior_natural(
         title = r_filepath[r_filepath.find("_sample_")+8:-6])
+
+    result.overplot()
+
+    result.radial_fit_profile()
 
 
 
