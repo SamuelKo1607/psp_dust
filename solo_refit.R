@@ -34,22 +34,22 @@ two_component_model <- function(cmd = c("graph", "Q", "mu", "initial",
   prec.high = exp(15)
   
   prior.l_a <- function(l_a=feed_x){
-    return(dgamma(l_a,   shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_a,   shape = 5,    scale = 2e-5, log=TRUE))
   }
   prior.l_b <- function(l_b=feed_x){
-    return(dgamma(l_b,   shape = 2,    scale = 1e-4, log=TRUE))
+    return(dgamma(l_b,   shape = 5,    scale = 2e-5, log=TRUE))
   }
   prior.v_b_r <- function(v_b_r=feed_x){
     #return(dnorm(v_b_r,  mean  = 63.4,    sd   = 6.7, log=TRUE))
-    return(dnorm(v_b_r,  mean  = 50.0,    sd   = 10, log=TRUE))
+    return(dnorm(v_b_r,  mean  = 50.0,    sd   = 5, log=TRUE))
   }
   prior.e_v <- function(e_v=feed_x){
     #return(dnorm(e_v,    mean  = 2.04,   sd   = 0.2, log=TRUE))
-    return(dnorm(e_v,    mean  = 2.2,   sd   = 0.2, log=TRUE))
+    return(dnorm(e_v,    mean  = 1.0,   sd   = 0.0001, log=TRUE))
   }
   prior.e_b_r <- function(e_b_r=feed_x){
     #return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.16, log=TRUE))
-    return(dnorm(e_b_r,    mean  = -1.8, sd   = 0.2, log=TRUE))
+    return(dnorm(e_b_r,    mean  = -1.61, sd   = 0.0001, log=TRUE))
   }
   
   rate <- function(#covariates
@@ -244,7 +244,7 @@ mydata = rbind(mydata_solo,mydata_psp)
 
 
 #filterinng to far-from the Sun only, SolO only
-mydata <- subset(mydata, r > 0.4 & sc_id == 1 & exposure > 0.5)
+mydata <- subset(mydata, r > 0.2 & sc_id == 1 & exposure > 0.1)
 n = length(mydata$vr)
 mydata$idx = 1:n
 
