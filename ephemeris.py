@@ -121,6 +121,7 @@ def load_hae(ephemeris_file):
 
 
 def fetch_heliocentric(file,
+                       cache_psp = True,
                        location = os.path.join("998_generated",
                                                "assets",
                                                "")):
@@ -133,11 +134,16 @@ def fetch_heliocentric(file,
     ----------
     file : str
        The ephemeris file to access.
+    cache_psp : bool, optional
+        Whether to use the chached files for PSP. 
+        This is a legacy and compatiblity thing, it will end up wrong if used
+        with a body different from PSP, use with caution.
+        The default is True for legacy reasons. 
 
     Returns
     -------
     f_hel_r : 1D function: float -> float
-        heliocentric distance in AU.
+        heliocentric distance in AU, function of JD.
     f_hel_phi : 1D function: float -> float
         heliocentric phase angle, measured from the first point of Aries.
     f_rad_v : 1D function: float -> float
@@ -145,21 +151,68 @@ def fetch_heliocentric(file,
     f_tan_v : 1D function: float -> float
         heliocentric tangential veloctiy in km/s.
     """
-    try:
-        with open(location+"f_hel_r.pkl", "rb") as f:
-            f_hel_r = pickle.load(f)
-        with open(location+"f_hel_phi.pkl", "rb") as f:
-            f_hel_phi = pickle.load(f)
-        with open(location+"f_rad_v.pkl", "rb") as f:
-            f_rad_v = pickle.load(f)
-        with open(location+"f_tan_v.pkl", "rb") as f:
-            f_tan_v = pickle.load(f)
-        with open(location+"f_v_phi.pkl", "rb") as f:
-            f_v_phi = pickle.load(f)
-        with open(location+"f_v_theta.pkl", "rb") as f:
-            f_v_theta = pickle.load(f)
-    except:
-        print("assets missing, loading "+file)
+    if "psp" not in file:
+        cache_psp = False
+    if cache_psp:
+        try:
+            with open(location+"f_hel_r.pkl", "rb") as f:
+                f_hel_r = pickle.load(f)
+            with open(location+"f_hel_phi.pkl", "rb") as f:
+                f_hel_phi = pickle.load(f)
+            with open(location+"f_rad_v.pkl", "rb") as f:
+                f_rad_v = pickle.load(f)
+            with open(location+"f_tan_v.pkl", "rb") as f:
+                f_tan_v = pickle.load(f)
+            with open(location+"f_v_phi.pkl", "rb") as f:
+                f_v_phi = pickle.load(f)
+            with open(location+"f_v_theta.pkl", "rb") as f:
+                f_v_theta = pickle.load(f)
+        except:
+            print("assets missing, loading "+file)
+            (jd_ephem,
+             hae_r,
+             hae_v,
+             hae_phi,
+             radial_v,
+             tangential_v,
+             hae_theta,
+             v_phi,
+             v_theta) = load_ephemeris(file)
+            heliocentric_distance = np.sqrt(  hae_r[:,0]**2
+                                            + hae_r[:,1]**2
+                                            + hae_r[:,2]**2 )/au #in au
+            f_hel_r = interpolate.interp1d(jd_ephem,heliocentric_distance,
+                                           fill_value="extrapolate",kind=3)
+            f_hel_phi = interpolate.interp1d(jd_ephem,hae_phi,
+                                             fill_value="extrapolate",kind=3)
+            f_rad_v = interpolate.interp1d(jd_ephem,radial_v,
+                                           fill_value="extrapolate",kind=3)
+            f_tan_v = interpolate.interp1d(jd_ephem,tangential_v,
+                                           fill_value="extrapolate",kind=3)
+            f_v_phi = interpolate.interp1d(jd_ephem,v_phi,
+                                           fill_value="extrapolate",kind=3)
+            f_v_theta = interpolate.interp1d(jd_ephem,v_theta,
+                                             fill_value="extrapolate",kind=3)
+    
+            print("constructing assets for PSP")
+            os.makedirs(location, exist_ok=True)
+            with open(location+"f_hel_r.pkl", "wb") as f:
+                pickle.dump(f_hel_r, f)
+            with open(location+"f_hel_phi.pkl", "wb") as f:
+                pickle.dump(f_hel_phi, f)
+            with open(location+"f_rad_v.pkl", "wb") as f:
+                pickle.dump(f_rad_v, f)
+            with open(location+"f_tan_v.pkl", "wb") as f:
+                pickle.dump(f_tan_v, f)
+            with open(location+"f_v_phi.pkl", "wb") as f:
+                pickle.dump(f_v_phi, f)
+            with open(location+"f_v_theta.pkl", "wb") as f:
+                pickle.dump(f_v_theta, f)
+        else:
+            pass
+        finally:
+            return f_hel_r, f_hel_phi, f_rad_v, f_tan_v, f_v_phi, f_v_theta
+    else:
         (jd_ephem,
          hae_r,
          hae_v,
@@ -184,24 +237,6 @@ def fetch_heliocentric(file,
                                        fill_value="extrapolate",kind=3)
         f_v_theta = interpolate.interp1d(jd_ephem,v_theta,
                                          fill_value="extrapolate",kind=3)
-
-        print("constructing assets")
-        os.makedirs(location, exist_ok=True)
-        with open(location+"f_hel_r.pkl", "wb") as f:
-            pickle.dump(f_hel_r, f)
-        with open(location+"f_hel_phi.pkl", "wb") as f:
-            pickle.dump(f_hel_phi, f)
-        with open(location+"f_rad_v.pkl", "wb") as f:
-            pickle.dump(f_rad_v, f)
-        with open(location+"f_tan_v.pkl", "wb") as f:
-            pickle.dump(f_tan_v, f)
-        with open(location+"f_v_phi.pkl", "wb") as f:
-            pickle.dump(f_v_phi, f)
-        with open(location+"f_v_theta.pkl", "wb") as f:
-            pickle.dump(f_v_theta, f)
-    else:
-        pass
-    finally:
         return f_hel_r, f_hel_phi, f_rad_v, f_tan_v, f_v_phi, f_v_theta
 
 
@@ -290,3 +325,57 @@ def get_approaches(ephem_file,
     local_minima = argrelextrema(r_resampled, np.less)[0]
     approaches = jd_resampled[local_minima[r_resampled[local_minima]<distance]]
     return approaches
+
+
+def get_phase_angle(ephem_file):
+    """
+    A function to get a function for an object's phase angle as
+    a function of julian date. 
+
+    Parameters
+    ----------
+    ephem_file : str
+        The location of the ephemeris file for the body of interest.
+
+    Returns
+    -------
+    phase_angle : function : float -> float
+        The phase angle as a function of julian date.
+
+    """
+    jds, hae = load_hae(ephem_file)
+    x = interpolate.interp1d(jds,hae[:,0],fill_value="extrapolate",kind=3)
+    y = interpolate.interp1d(jds,hae[:,1],fill_value="extrapolate",kind=3)
+    def phase_angle(jd):
+        """
+        The HAE phase angle as a function of julian date. 
+        Heliocentric phase angle is measured from the first point of Aries.
+
+        Parameters
+        ----------
+        jd : float or np.array of float
+            Julian date of interest.
+
+        Returns
+        -------
+        angle : float of np.array of float
+            HAE phase angle, measured from the first point of Aries,
+            in degrees. The shape matches the input.
+
+        """
+        angle = np.degrees(np.arctan2(y(jd),x(jd)))
+        return angle
+    return phase_angle
+
+
+
+
+
+
+
+
+
+
+
+
+
