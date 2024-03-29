@@ -6,7 +6,6 @@ from scipy import interpolate
 from scipy import stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-from matplotlib.colors import to_rgb
 import pyreadr
 
 from conversions import jd2date
@@ -814,18 +813,6 @@ class InlaResult:
         ax.set_yscale('log')
         ax.legend()
         fig.show()
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
