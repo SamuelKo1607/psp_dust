@@ -1,13 +1,11 @@
 import os
 import numpy as np
 import pandas as pd
-import glob
 from scipy import stats
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-import pyreadr
 import datetime as dt
+from tqdm.auto import tqdm
 
 from conversions import jd2date, date2jd
 from conversions import deg2rad
@@ -339,45 +337,97 @@ def step(theta,
     return theta, change
 
 
-def main(goal_length = 10000,
-         goal_changes = 10,
-         theta = [7.79e-05, 5.88e-05, 62.4, 1.6, 0.075, 0.742]):
+def show(samples,theta0,filename=None):
+
+    #fig, ax = plt.subplots(nrows=np.shape(samples)[1],ncols=1,
+    #                       figsize=(3, 0.75*np.shape(samples)[1]))
+
+    fig = plt.figure(figsize=(4,0.666*np.shape(samples)[1]))
+    gs = fig.add_gridspec(np.shape(samples)[1], hspace=.6)
+    ax = gs.subplots()
+
+    for a, p, transform, lim, label in zip(ax,
+                          range(np.shape(samples)[1]),
+                          [lambda x : x,
+                           lambda x : x,
+                           lambda x : x,
+                           lambda x : 1+x,
+                           lambda x : -x-1.5,
+                           lambda x : x],
+                          [[0,3e-4],
+                           [0,3e-4],
+                           [20,80],
+                           [1,3],
+                           [-2.5,-1.5],
+                           [0,1],],
+                          [r"$\lambda_a$",
+                           r"$\lambda_b$",
+                           r"$v_{b,r}$",
+                           r"$\epsilon_v$",
+                           r"$\epsilon_{b,r}$",
+                           r"$\alpha_{shield}$"]):
+        a.hist(transform(samples[:,p]),
+               bins=int(np.sqrt(np.shape(samples)[0]/10)))
+        a.set_xlim(lim)
+        a.set_ylabel(label)
+
+    fig.suptitle(f"""{np.shape(samples)[0]} samples \n
+                 theta0 = {theta0} \n""")
+    fig.tight_layout()
+    if filename is not None:
+        plt.savefig(os.path.join(figures_location,filename+'.png'),
+                                 format='png', dpi=600)
+    fig.show()
+
+
+def main(goal_length=10000,
+         goal_changes=100,
+         theta0=[7.79e-05, 5.88e-05, 62.4, 1.6, 0.075, 0.742],
+         mute=False,
+         stepscale=0.075,
+         burnin=1000):
     data = load_data()
+    theta = theta0
     changes = 0
+    goal_tot = int(goal_length+burnin)
     sampled = np.zeros(shape=(0,6))
     sampled = np.vstack((sampled,np.array(theta)))
 
-    while np.shape(sampled)[0]<goal_length or changes<goal_changes:
-        theta, change = step(theta,data)
-        if change:
-            changes += change
-            #print(np.shape(sampled)[0],changes)
-        sampled = np.vstack((sampled,np.array(theta)))
+    with tqdm(total=goal_tot) as pbar:
+        while np.shape(sampled)[0]<goal_tot or changes<goal_changes:
+            theta, change = step(theta,data,scale=stepscale)
+            if change:
+                changes += change
+            if not mute:
+                pbar.update(1)
+            sampled = np.vstack((sampled,np.array(theta)))
 
-    print(f"goal length: {goal_length}")
-    print(f"acc. rate = {changes/goal_length}")
-    print(dt.datetime.now())
-    return sampled
-
-
-def show(samples):
-
-    fig, ax = plt.subplots(nrows=np.shape(sampled)[1],ncols=1,
-                           figsize=(3, 1*np.shape(sampled)[1]))
-
-    for a, p in zip(ax,range(np.shape(sampled)[1])):
-        a.hist(sampled[:,p])
-
-    fig.suptitle(f"{np.shape(sampled)[0]} samples")
-
-    fig.show()
+    if not mute:
+        print(f"goal length: {int(goal_length)} (+{int(burnin)} burn-in)")
+        print(f"acc. rate = {changes/goal_tot}")
+        print(dt.datetime.now())
+        show(sampled[burnin:,:],theta0)
+    return sampled[burnin:,:]
 
 #%%
 if __name__ == "__main__":
 
-    for size in [1e2,1e3,1e4,1e5]:
-        sampled = main(goal_length=size)
-        show(sampled)
+    sampled = main(goal_length = 1e5,
+                   theta0 = [7.79e-05,
+                             5.88e-05,
+                             62.4,
+                             1.6,
+                             0.075,
+                             0.742])
+
+    sampled = main(goal_length = 1e5,
+                   theta0 = [1e-04,
+                             1e-04,
+                             50,
+                             1,
+                             0.5,
+                             0.5])
+
 
 
 
