@@ -78,6 +78,12 @@ def hae2vse(hae_target,hae_venus):
     vse = np.matmul(rotation_matrix,vae)
     return vse
 
+def deg2rad(deg):
+    return deg / 180 * np.pi
+
+def rad2deg(rad):
+    return rad / np.pi * 180
+
 # def tt2000_to_date(epoch): #some adapted C routine
 #     x=pycdf.Library()
 #     epoch = np.array(epoch)
