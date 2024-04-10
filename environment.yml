@@ -12,4 +12,7 @@ dependencies:
   - conda-forge::pyreadr=0.5
   - tqdm=4.65
   - conda-forge::alive-progress=3.1
+  - numba=0.59
+  - cudatoolkit=11.8
+  - conda-forge::numba-stats=1.7
 prefix: C:\Users\skoci\anaconda3\envs\psp_dust
