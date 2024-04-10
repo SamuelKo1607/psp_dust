@@ -64,7 +64,8 @@ def find_best_match(solo_df, psp_df):
 
     best = np.argwhere(badness==np.min(badness))[0]
 
-    return solo_df['Julian date'][best[0]], psp_df['Julian date'][best[1]]
+    return (solo_df['Julian date'].to_numpy()[best[0]],
+            psp_df['Julian date'].to_numpy()[best[1]])
 
 
 
