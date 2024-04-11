@@ -77,5 +77,5 @@ if __name__ == "__main__":
 
     solo_df, psp_df = load_data()
     solo_jd, psp_jd = find_best_match(solo_df, psp_df)
-    print(solo_jd,jd2date(solo_jd))
-    print(psp_jd,jd2date(psp_jd))
+    print("solo: ",solo_jd,jd2date(solo_jd))
+    print("psp: ",psp_jd,jd2date(psp_jd))
