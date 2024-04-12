@@ -315,7 +315,7 @@ def log_prior(theta,
 
     logpriors = [lambda x : stats.gamma.logpdf(x,a=5,scale=2e-5),
                  lambda x : stats.gamma.logpdf(x,a=5,scale=2e-5),
-                 lambda x : stats.gamma.logpdf(x,a=2,scale=1e-1),
+                 lambda x : stats.gamma.logpdf(x,a=5,scale=1e-1),
                  lambda x : stats.gamma.logpdf(x,a=5,scale=2e-1),
                  lambda x : stats.beta.logpdf(x,3,3),
                  lambda x : stats.beta.logpdf(x,3,3)]
@@ -387,11 +387,13 @@ def source_rate(v_sc_r, v_sc_t,
         DESCRIPTION.
 
     """
+    b = (beta+1)/2 #theta[4] is natively 0-1, but we want it 0.5-1
+
     # beta meteoroid contribution
     v_origin = 29.8*origin**(-0.5) #[km/s]
     v_azim_beta = v_origin * origin / r_sc #[km/s]
     v_total_beta = (((v_origin*1000)**2
-                    + 2*GM*(1-beta)*(1/AU)*(1/r_sc-1/origin))**0.5
+                    + 2*GM*(1-b)*(1/AU)*(1/r_sc-1/origin))**0.5
                     )/1000 #[km/s]
     v_rad_beta = (v_total_beta**2 - v_azim_beta**2)**0.5
     v_rad_impact = v_rad_beta-v_sc_r
@@ -399,7 +401,7 @@ def source_rate(v_sc_r, v_sc_t,
     v_impact_beta = (v_rad_impact**2 + v_azim_impact**2)**0.5
 
     v_total_beta_1au = (((v_origin*1000)**2
-                         + 2*GM*(1-beta)*(1/AU)*(1-1/origin))**0.5
+                         + 2*GM*(1-b)*(1/AU)*(1-1/origin))**0.5
                         )/1000 #[km/s]
     v_azim_beta_1au = v_origin * origin #[km/s]
     v_rad_beta_1au = (v_total_beta_1au**2 - v_azim_beta_1au**2)**0.5
@@ -870,7 +872,7 @@ if __name__ == "__main__":
                              1e-4,
                              0.2,
                              1.,
-                             0.6,
+                             0.2,
                              0.5],
                     filename = "first_try")
 
