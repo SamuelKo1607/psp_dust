@@ -178,7 +178,9 @@ def rate_samples(sampled,
 
 def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
               psp_file=os.path.join("data_synced","psp_flux_readable.csv"),
-              which="both"):
+              which="both",
+              timeframe=(2450000.0,2500000.0),
+              r_min=0.4):
     """
     Loads anf shapes the observational data. 
 
@@ -194,6 +196,10 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
         Which SC to perform the fit for. 
         Allowed values: "solo", "psp", "both".
         The default is "both", in which case both are used.
+    timeframe : tuple of float
+        Min and max jd time.
+    r_min : float
+        Minimum heliocentric distance [AU].
 
     Raises
     ------
@@ -208,10 +214,14 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
     """
     solo_df = pd.read_csv(solo_file)
     solo_df = solo_df[solo_df["Detection time [hours]"]>0]
-    solo_df = solo_df[solo_df["Radial distance [au]"]>0.4]
+    solo_df = solo_df[solo_df["Radial distance [au]"]>r_min]
+    solo_df = solo_df[solo_df['Julian date']>timeframe[0]]
+    solo_df = solo_df[solo_df['Julian date']<timeframe[1]]
     psp_df = pd.read_csv(psp_file)
     psp_df = psp_df[psp_df["Detection time [hours]"]>0]
-    psp_df = psp_df[psp_df["Radial distance [au]"]>0.4]
+    psp_df = psp_df[psp_df["Radial distance [au]"]>r_min]
+    psp_df = psp_df[psp_df['Julian date']>timeframe[0]]
+    psp_df = psp_df[psp_df['Julian date']<timeframe[1]]
 
     if which=="both":
         v_sc_r = np.append(solo_df["Radial velocity [km/s]"],
@@ -759,7 +769,7 @@ def approx_mode(sampled):
     return result
 
 
-def show_marginals(samples,theta0,mode,filename=None):
+def show_marginals(samples,theta0,mode,loglik,filename=None):
     fig = plt.figure(figsize=(4,0.666*np.shape(samples)[1]))
     gs = fig.add_gridspec(np.shape(samples)[1], hspace=.6)
     ax = gs.subplots()
@@ -815,7 +825,7 @@ def show_marginals(samples,theta0,mode,filename=None):
         a.set_ylabel(label)
 
     fig.suptitle(f"{np.shape(samples)[0]} samples,"
-                 +f" loglik = {log_prior(mode)} \n"
+                 +f" loglik = {loglik} \n"
                  +r"$\theta_{0}=$"+f" {theta0}", color="tab:blue")
     fig.tight_layout()
     if filename is not None:
@@ -955,12 +965,13 @@ def main(goal_length=1e5,
     for result in poolresults:
         sampled = np.vstack((sampled,result))
     mode = approx_mode(sampled[burnin:,:])
+    loglik = log_likelihood(mode, data, shield)
     if not mute:
         diff = dt.datetime.now() - start
         seconds = diff.seconds + 24*3600*diff.days
         print(f"{sampled.shape[0]} samples produced in {seconds} seconds")
-        print(f"mode: {mode}, loglik: {log_prior(mode)}")
-        show_marginals(sampled[burnin:,:],theta0,mode,filename=filename)
+        print(f"mode: {mode}, loglik: {loglik}")
+        show_marginals(sampled[burnin:,:],theta0,mode,loglik,filename=filename)
         show_rate(sampled[burnin:,:],shield=shield,filename=filename)
         print(filename+" done")
     return sampled[burnin:,:], mode
@@ -970,33 +981,33 @@ def main(goal_length=1e5,
 
 #%%
 if __name__ == "__main__":
-
-    for i,a in enumerate(np.linspace(0.05,0.95,19)):
-
-        sampled, mode = main(
-            goal_length=1e6,
-            burnin=20000,
-            shield = False,
-            theta0 = [7.79e-05,
-                      5.88e-05,
-                      62.4,
-                      1.6,
-                      0.075,
-                      a],
-            filename = f"no_shield_{i+1}")
+    pass
 
 
-    # sampled, mode = main(
-    #     goal_length = 1e4,
-    #     burnin = 1000,
-    #     shield = True,
-    #     theta0 = [7.79e-05,
-    #               5.88e-05,
-    #               62.4,
-    #               1.6,
-    #               0.075,
-    #               0.742],
-    #     filename = "shield_good_start")
+    # for i,a in enumerate(np.linspace(0.05,0.95,19)):
+
+    #     sampled, mode = main(
+    #         goal_length=2e5,
+    #         burnin=20000,
+    #         shield = False,
+    #         theta0 = [7.79e-05,
+    #                   5.88e-05,
+    #                   62.4,
+    #                   1.6,
+    #                   0.075,
+    #                   a],
+    #         filename = f"no_shield_{i+1}")
+
+    sampled = main(goal_length = 1e6,
+                    burnin = 200000,
+                    theta0 = [7.79e-05,
+                              5.88e-05,
+                              62.4,
+                              1.6,
+                              0.075,
+                              0.742],
+                    filename = "solo_only_old_data",
+                    data = load_data(which="solo",timeframe=(0,2459565)))
 
     """
     sampled, mode = main(
