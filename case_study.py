@@ -3,8 +3,16 @@ import numpy as np
 import pandas as pd
 from tqdm.auto import tqdm
 from numba import jit
+import datetime as dt
+from scipy import stats
+import matplotlib.pyplot as plt
+import matplotlib as mpl
 
-from conversions import jd2date
+import figure_standards as figstd
+axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
+mpl.rcParams['figure.dpi'] = 600
+
+from conversions import jd2date, date2jd
 
 def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
               psp_file=os.path.join("data_synced","psp_flux_readable.csv")):
@@ -42,33 +50,175 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
     return solo_df, psp_df
 
 
-def find_best_match(solo_df, psp_df):
+def find_matches(solo_df, psp_df,
+                 solo_dtmin=dt.datetime(2010,1,1),
+                 solo_dtmax=dt.datetime(2030,1,1),
+                 n_matches=6,
+                 drop_margin=30,
+                 mute=True):
 
-    # 1st dimension is as in solo jd, 2nd dimension as in psp jd
-    solo_r = np.tile(solo_df['Radial distance [au]'].to_numpy(),
-                     (len(psp_df.index),1)).transpose()
-    solo_vr = np.tile(solo_df['Radial velocity [km/s]'].to_numpy(),
-                      (len(psp_df.index),1)).transpose()
-    solo_vt = np.tile(solo_df['Tangential velocity [km/s]'].to_numpy(),
-                      (len(psp_df.index),1)).transpose()
-    psp_r = np.tile(psp_df['Radial distance [au]'].to_numpy(),
-                    (len(solo_df.index),1))
-    psp_vr = np.tile(psp_df['Radial velocity [km/s]'].to_numpy(),
-                    (len(solo_df.index),1))
-    psp_vt = np.tile(psp_df['Tangential velocity [km/s]'].to_numpy(),
-                    (len(solo_df.index),1))
+    # filter the date
+    sod = solo_df[(solo_df['Julian date']<date2jd(solo_dtmax))
+                 *(date2jd(solo_dtmin)<solo_df['Julian date'])]
+    psd = psp_df[(psp_df['Julian date']<date2jd(dt.datetime(2030,1,1)))
+                *(date2jd(dt.datetime(2010,1,1))<psp_df['Julian date'])]
 
-    badness = ((np.abs(solo_vr-psp_vr)/5)
-                + (np.abs(solo_vt-psp_vt)/5)
-                + (np.abs(solo_r-psp_r)/0.1))
+    matches = []
+    while len(matches)<n_matches:
 
-    best = np.argwhere(badness==np.min(badness))[0]
+        # 1st dimension is as in solo jd, 2nd dimension as in psp jd
+        solo_r = np.tile(sod['Radial distance [au]'].to_numpy(),
+                         (len(psd.index),1)).transpose()
+        solo_vr = np.tile(sod['Radial velocity [km/s]'].to_numpy(),
+                          (len(psd.index),1)).transpose()
+        solo_vt = np.tile(sod['Tangential velocity [km/s]'].to_numpy(),
+                          (len(psd.index),1)).transpose()
+        psp_r = np.tile(psd['Radial distance [au]'].to_numpy(),
+                        (len(sod.index),1))
+        psp_vr = np.tile(psd['Radial velocity [km/s]'].to_numpy(),
+                        (len(sod.index),1))
+        psp_vt = np.tile(psd['Tangential velocity [km/s]'].to_numpy(),
+                        (len(sod.index),1))
 
-    return (solo_df['Julian date'].to_numpy()[best[0]],
-            psp_df['Julian date'].to_numpy()[best[1]])
+        # find the best and store
+        badness = ((np.abs(solo_vr-psp_vr)/3)
+                    + (np.abs(solo_vt-psp_vt)/3)
+                    + (np.abs(solo_r-psp_r)/.1))
+        best = np.argwhere(badness==np.min(badness))[0]
+        solo_jd = sod['Julian date'].to_numpy()[best[0]]
+        psp_jd = psd['Julian date'].to_numpy()[best[1]]
+        matches.append((solo_jd, psp_jd))
+
+        # drop everything near to the match
+        sod = sod.drop(sod[np.isclose(sod['Julian date'],solo_jd,
+                                      rtol=0,
+                                      atol=drop_margin)].index)
+        psd = psd.drop(psd[np.isclose(psd['Julian date'],psp_jd,
+                                      rtol=0,
+                                      atol=drop_margin)].index)
+
+        if not mute:
+            print("solo: ",solo_jd,jd2date(solo_jd),
+                  sod['Radial distance [au]'].to_numpy()[best[0]],
+                  sod['Radial velocity [km/s]'].to_numpy()[best[0]],
+                  sod['Tangential velocity [km/s]'].to_numpy()[best[0]])
+            print("psp: ",psp_jd,jd2date(psp_jd),
+                  psd['Radial distance [au]'].to_numpy()[best[1]],
+                  psd['Radial velocity [km/s]'].to_numpy()[best[1]],
+                  psd['Tangential velocity [km/s]'].to_numpy()[best[1]])
+            print("dr = ",
+                  (sod['Radial distance [au]'].to_numpy()[best[0]]-
+                   psd['Radial distance [au]'].to_numpy()[best[1]]))
+            print("dv_rad = ",
+                  (sod['Radial velocity [km/s]'].to_numpy()[best[0]]-
+                   psd['Radial velocity [km/s]'].to_numpy()[best[1]]))
+            print("dv_azim = ",
+                  (sod['Tangential velocity [km/s]'].to_numpy()[best[0]]-
+                   psd['Tangential velocity [km/s]'].to_numpy()[best[1]]))
+
+    return matches
+
+
+def get_near(df,jd,days=7):
+    return df[np.abs(df['Julian date']-jd)<days]
+
+
+def evaluate_match(s_n,s_e,s_r,s_vr,s_vt,
+                   p_n,p_e,p_r,p_vr,p_vt):
+    s_lo_rate = stats.poisson.ppf(0.05, mu=s_n)/s_e
+    s_hi_rate = stats.poisson.ppf(0.95, mu=s_n)/s_e
+
+    # if all is beta
+    p_n_beta = p_n * ((50-s_vr)/(50-p_vr))**2.3 * (s_r**(-2))/(p_r**(-2))
+    # if all is bound
+    p_n_bound = p_n * (((30-s_vt)**2+s_vr**2)**0.5
+                       /((30-p_vt)**2+p_vr**2)**0.5) * ((s_r**(-1.3))
+                                                        /(p_r**(-1.3)))
+    p_rate_beta = p_n_beta / p_e
+    p_rate_bound = p_n_bound / p_e
+
+    beta_lo = p_rate_beta / s_hi_rate
+    beta_hi = p_rate_beta / s_lo_rate
+
+    bound_lo = p_rate_bound / s_hi_rate
+    bound_hi = p_rate_bound / s_lo_rate
+
+    distance = (s_r+p_r)/2
+    v_rad = (s_vr+p_vr)/2
+
+    return distance,v_rad,beta_lo,beta_hi,bound_lo,bound_hi
 
 
 
+def main(solo_df, psp_df):
+    matches = find_matches(solo_df, psp_df)
+
+    distances = np.zeros(0)
+    v_rads = np.zeros(0)
+    raws = np.zeros(0)
+    beta_los = np.zeros(0)
+    beta_his = np.zeros(0)
+    bound_los = np.zeros(0)
+    bound_his = np.zeros(0)
+
+    for m in matches:
+        s_hit_df = get_near(solo_df,m[0])
+        s_flux = (np.sum(s_hit_df['Fluxes [/day]'])
+                  /np.sum(s_hit_df['Detection time [hours]']
+                          *s_hit_df['Area front [m^2]']))
+        s_r = np.mean(s_hit_df['Radial distance [au]'])
+        s_v_rad = np.mean(s_hit_df['Radial velocity [km/s]'])
+        s_v_tan = np.mean(s_hit_df['Tangential velocity [km/s]'])
+        print("solo: ",s_r, s_v_rad, s_v_tan, s_flux)
+
+        p_hit_df = get_near(psp_df,m[1])
+        p_flux = (np.sum(p_hit_df['Count corrected [/day]'])
+                  /np.sum(p_hit_df['Detection time [hours]']
+                          *p_hit_df['Area front [m^2]']))
+        p_r = np.mean(p_hit_df['Radial distance [au]'])
+        p_v_rad = np.mean(p_hit_df['Radial velocity [km/s]'])
+        p_v_tan = np.mean(p_hit_df['Tangential velocity [km/s]'])
+        print("psp: ",p_r, p_v_rad, p_v_tan, p_flux)
+
+        distance,v_rad,beta_lo,beta_hi,bound_lo,bound_hi = evaluate_match(
+            np.sum(s_hit_df['Fluxes [/day]']),
+            np.sum(s_hit_df['Detection time [hours]']
+                    *s_hit_df['Area front [m^2]']),
+            s_r, s_v_rad, s_v_tan,
+            np.sum(p_hit_df['Count corrected [/day]']),
+            np.sum(p_hit_df['Detection time [hours]']
+                    *p_hit_df['Area front [m^2]']),
+            p_r, p_v_rad, p_v_tan)
+
+        distances = np.append(distances,distance)
+        v_rads = np.append(v_rads,v_rad)
+        raws = np.append(raws,p_flux/s_flux)
+        beta_los = np.append(beta_los,beta_lo)
+        beta_his = np.append(beta_his,beta_hi)
+        bound_los = np.append(bound_los,bound_lo)
+        bound_his = np.append(bound_his,bound_hi)
+
+    plt.scatter(distances,raws,color="k",label="raw")
+    plt.vlines(distances,beta_los,beta_his,
+               color="red",alpha=0.5,label="if all beta")
+    plt.vlines(distances,bound_los,bound_his,
+               color="blue",alpha=0.5,label="if all bound")
+    plt.xlabel("Heliocentric distance [AU]")
+    plt.ylabel("PSP vs SolO sensitivity")
+    plt.legend(loc=9,fontsize="small")
+    plt.show()
+
+    plt.scatter(v_rads,raws,color="k",label="raw")
+    plt.vlines(v_rads,beta_los,beta_his,
+               color="red",alpha=0.5,label="if all beta")
+    plt.vlines(v_rads,bound_los,bound_his,
+               color="blue",alpha=0.5,label="if all bound")
+    plt.xlabel("Radial speed [km/s]")
+    plt.ylabel("PSP vs SolO sensitivity")
+    plt.legend(loc=9,fontsize="small")
+    plt.show()
+
+    return matches
 
 
 
@@ -76,6 +226,7 @@ def find_best_match(solo_df, psp_df):
 if __name__ == "__main__":
 
     solo_df, psp_df = load_data()
-    solo_jd, psp_jd = find_best_match(solo_df, psp_df)
-    print("solo: ",solo_jd,jd2date(solo_jd))
-    print("psp: ",psp_jd,jd2date(psp_jd))
+    print(main(solo_df, psp_df))
+
+
+
