@@ -2,7 +2,7 @@ import numpy as np
 import calendar
 import datetime as dt
 
-GM=1.3271244002e20 #gravitational paramter of the Sun
+GM = 1.3271244002e20 #gravitational paramter of the Sun
 AU = 149597870700 #astronomical unit, m
 
 def zrot(th,rad=False): #in degrees
