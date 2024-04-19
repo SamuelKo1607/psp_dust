@@ -92,10 +92,12 @@ def rate_samples(sampled,
     sample = sampled[np.random.choice(sampled.shape[0],
                                       replace=False,
                                       size=sample_size),:]
-    if shield:
+    if shield==1:
         mu = usual_rate
-    else:
+    elif shield==0:
         mu = homogeneous_psp_rate
+    elif shield==2:
+        mu = flat_bound_rate
 
     solo_input_df = pd.read_csv(solo_file)
     psp_input_df = pd.read_csv(psp_file)
@@ -180,7 +182,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
               psp_file=os.path.join("data_synced","psp_flux_readable.csv"),
               which="both",
               timeframe=(2450000.0,2500000.0),
-              r_min=0.4):
+              r_min=0.4,
+              r_max=10):
     """
     Loads anf shapes the observational data. 
 
@@ -200,6 +203,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
         Min and max jd time.
     r_min : float
         Minimum heliocentric distance [AU].
+    r_max : float
+        Maximum heliocentric distance [AU].
 
     Raises
     ------
@@ -215,11 +220,13 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
     solo_df = pd.read_csv(solo_file)
     solo_df = solo_df[solo_df["Detection time [hours]"]>0]
     solo_df = solo_df[solo_df["Radial distance [au]"]>r_min]
+    solo_df = solo_df[solo_df["Radial distance [au]"]<r_max]
     solo_df = solo_df[solo_df['Julian date']>timeframe[0]]
     solo_df = solo_df[solo_df['Julian date']<timeframe[1]]
     psp_df = pd.read_csv(psp_file)
     psp_df = psp_df[psp_df["Detection time [hours]"]>0]
     psp_df = psp_df[psp_df["Radial distance [au]"]>r_min]
+    psp_df = psp_df[psp_df["Radial distance [au]"]<r_max]
     psp_df = psp_df[psp_df['Julian date']>timeframe[0]]
     psp_df = psp_df[psp_df['Julian date']<timeframe[1]]
 
@@ -240,6 +247,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
                              psp_df['Detection time [hours]'])
         measured = np.append(solo_df["Fluxes [/day]"].astype(int),
                              psp_df["Count corrected [/day]"].astype(int))
+        jd = np.append(solo_df['Julian date'],
+                       psp_df['Julian date'])
     elif which=="solo":
         v_sc_r = np.array(solo_df["Radial velocity [km/s]"])
         v_sc_t = np.array(solo_df["Tangential velocity [km/s]"])
@@ -249,6 +258,7 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
         heat_shield = np.array(0 * np.ones(len(solo_df.index)))
         obs_time = np.array(solo_df['Detection time [hours]'])
         measured = np.array(solo_df["Fluxes [/day]"].astype(int))
+        jd = np.array(solo_df['Julian date'])
     elif which=="psp":
         v_sc_r = np.array(psp_df["Radial velocity [km/s]"])
         v_sc_t = np.array(psp_df["Tangential velocity [km/s]"])
@@ -258,6 +268,7 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
         heat_shield = np.array(1 * np.ones(len(psp_df.index)))
         obs_time = np.array(psp_df['Detection time [hours]'])
         measured = np.array(psp_df["Count corrected [/day]"].astype(int))
+        jd = np.array(psp_df['Julian date'])
     else:
         raise Exception(f"unknown spacecraft: {which}")
 
@@ -268,7 +279,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
                                        area_side,
                                        heat_shield,
                                        obs_time,
-                                       measured]).transpose(),
+                                       measured,
+                                       jd]).transpose(),
                         index=np.arange(len(v_sc_r),dtype=int),
                         columns=["v_sc_r",
                                  "v_sc_t",
@@ -277,7 +289,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
                                  "area_side",
                                  "heat_shield",
                                  "obs_time",
-                                 "measured"])
+                                 "measured",
+                                 "jd"])
 
     return data
 
@@ -559,10 +572,100 @@ def homogeneous_psp_rate(v_sc_r, v_sc_t,
 
     return hourly_rate
 
+@jit
+def flat_bound_rate(v_sc_r, v_sc_t,
+                    r_sc,
+                    area_front, area_side,
+                    heat_shield,
+                    l_a, l_b,
+                    v_b_r,
+                    e_v,
+                    e_b_r,
+                    shield_miss_rate,
+                    e_a_r=-1.3,
+                    v_b_a=9, v_earth_a=0):
+    """
+    The rate, assuming the whole PSP has a different sensitivity. 
+    Thw shield_miss_rate takes on the role of 
+    the sensitivity relative to SolO.
+    Bound dust is accounted for in the form of a constant rate.
+
+    Parameters
+    ----------
+    v_sc_r : np.array of float
+        SC radial speed, positive outwards, km/s.
+    v_sc_t : np.array of float
+        SC azimuthal speed, positive prograde, km/s.
+    r_sc : np.array of float
+        SC heliocentric distance, >0.
+    area_front : np.array of float
+        DESCRIPTION.
+    area_side : np.array of float
+        DESCRIPTION.
+    heat_shield : np.array of float
+        DESCRIPTION.
+    l_a : float
+        The amount of bound dust at 1AU, m^-2 s^-1.
+    l_b : float
+        The amount of beta dust at 1AU, m^-2 s^-1.
+    v_b_r : float
+        The beta veloctiy at 1AU, km/s.
+    e_v : float
+        The exponent on velocity.
+    e_b_r : float
+        The exponent on radial distance (beta).
+    shield_miss_rate : float
+        The miss rate on the heat shield of PSP.
+    e_a_r : TYPE, optional
+        DESCRIPTION. The default is -1.3.
+    v_b_a : TYPE, optional
+        DESCRIPTION. The default is 9.
+    v_earth_a : TYPE, optional
+        DESCRIPTION. The default is 0.
+
+    Returns
+    -------
+    hourly_rate : float
+        DESCRIPTION.
+
+    """
+    #beta meteoroid contribution
+    ksi = -2 - (-1.5-e_b_r)
+    r_factor = r_sc/1
+    v_factor = ( (
+        ( v_sc_r - ( v_b_r*(r_factor**ksi)  ) )**2
+        + ( v_sc_t - ( v_b_a*(r_factor**(-1)) ) )**2
+      )**0.5
+      ) / ( (
+        ( v_b_r )**2
+        + ( v_earth_a - v_b_a )**2
+      )**0.5
+      )
+    radial_impact_velocity = -1* (v_sc_r-(v_b_r*(r_factor**ksi)))
+      #positive is on the heatshield, negative on the tail
+    azimuthal_impact_velocity = np.abs(v_sc_t-(v_b_a*(r_factor**(-1))))
+      #always positive, RHS vs LHS plays no role
+    impact_angle = np.arctan( azimuthal_impact_velocity
+                        / radial_impact_velocity )
+
+    area = ( ( area_front  * np.cos(impact_angle)
+               + area_side * np.sin(np.abs(impact_angle)) )
+            * (1 - shield_miss_rate * heat_shield) )
+    
+    L_b = l_b * area * (v_factor)**(e_v+1) * (r_factor)**(-1.5-e_b_r)
+    
+    #bound dust contribution
+    L_a = l_a * area_front * (1 - shield_miss_rate * heat_shield)
+    
+    #normalization to hourly rate, while L_i are in s^-1
+    hourly_rate = 3600 * ( L_b + L_a )
+
+    return hourly_rate
+
 
 def log_likelihood(theta,
                    data,
-                   shield=True):
+                   shield=1):
     """
     The log-likelihood of data, given theta.
 
@@ -590,7 +693,7 @@ def log_likelihood(theta,
     e_b_r = theta[4]
     shield_miss_rate = theta[5]
 
-    if shield:
+    if shield==1:
         rate = usual_rate(data["v_sc_r"].to_numpy(),
                           data["v_sc_t"].to_numpy(),
                           data["r_sc"].to_numpy(),
@@ -603,7 +706,7 @@ def log_likelihood(theta,
                           e_v,
                           e_b_r,
                           shield_miss_rate) * data["obs_time"]
-    else:
+    elif shield==0:
         rate = homogeneous_psp_rate(data["v_sc_r"].to_numpy(),
                                     data["v_sc_t"].to_numpy(),
                                     data["r_sc"].to_numpy(),
@@ -616,6 +719,21 @@ def log_likelihood(theta,
                                     e_v,
                                     e_b_r,
                                     shield_miss_rate) * data["obs_time"]
+    elif shield==2:
+        rate = flat_bound_rate(data["v_sc_r"].to_numpy(),
+                               data["v_sc_t"].to_numpy(),
+                               data["r_sc"].to_numpy(),
+                               data["area_front"].to_numpy(),
+                               data["area_side"].to_numpy(),
+                               data["heat_shield"].to_numpy(),
+                               l_a,
+                               l_b,
+                               v_b_r,
+                               e_v,
+                               e_b_r,
+                               shield_miss_rate) * data["obs_time"]
+    else:
+        raise Exception(f"shield = {shield} unknown")
 
     logliks = stats.poisson.logpmf(data["measured"],mu=rate)
     loglik = np.sum(logliks)
@@ -680,7 +798,7 @@ def step(theta,
          data,
          scale=0.075,
          family="normal",
-         shield=True):
+         shield=1):
     """
     Performs a step, returns either the old or the new theta.
 
@@ -729,7 +847,7 @@ def walk(pbar_row,
          data,
          stepscale,
          stepfamily="normal",
-         stepshield=True):
+         stepshield=1):
     sampled = np.zeros(shape=(0,6))
     theta = theta_start
     for i in tqdm(range(nsteps),position=pbar_row):
@@ -925,7 +1043,7 @@ def main(goal_length=1e5,
          burnin=10000,
          burnin_changes=100,
          theta0=[7.79e-05, 5.88e-05, 62.4, 1.6, 0.075, 0.742],
-         shield=True,
+         shield=1,
          stepscale=0.075,
          cores=8,
          family="uniform",
@@ -998,16 +1116,30 @@ if __name__ == "__main__":
     #                   a],
     #         filename = f"no_shield_{i+1}")
 
-    sampled = main(goal_length = 1e6,
-                    burnin = 200000,
-                    theta0 = [7.79e-05,
-                              5.88e-05,
-                              62.4,
-                              1.6,
-                              0.075,
-                              0.742],
-                    filename = "solo_only_old_data",
-                    data = load_data(which="solo",timeframe=(0,2459565)))
+    sampled = main(goal_length = 5e5,
+                   burnin = 100000,
+                   theta0 = [7.79e-05,
+                             5.88e-05,
+                             62.4,
+                             1.6,
+                             0.075,
+                             0.742],
+                   shield = 1,
+                   stepscale=0.15,
+                   filename = "solo_only_all_data",
+                   data = load_data(which="solo"))
+
+    # sampled = main(goal_length = 5e5,
+    #                burnin = 100000,
+    #                theta0 = [7.79e-05,
+    #                          5.88e-05,
+    #                          62.4,
+    #                          1.6,
+    #                          0.075,
+    #                          0.742],
+    #                shield = 2,
+    #                filename = "solo_only_old_data_flat",
+    #                data = load_data(which="solo",timeframe=(0,2459565)))
 
     """
     sampled, mode = main(
@@ -1056,13 +1188,6 @@ if __name__ == "__main__":
                     filename = "psp_only",
                     data = load_data(which="psp"))
     """
-
-
-
-
-
-
-
 
 
 
