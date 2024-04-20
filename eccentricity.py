@@ -1,7 +1,9 @@
+import os
 import numpy as np
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime as dt
+from numba import jit
 
 from eccentricity_core import bound_flux_vectorized
 from mcmc import load_data
@@ -126,38 +128,60 @@ def plot_maxima_zoom(data,
     if filename is not None:
         fig.savefig(figures_location+filename+".png",dpi=1200)
 
+    fig.show()
 
-def main(e=0.01):
+
+def plot_perihelion(flux_front,
+                    flux_side,
+                    xmin,
+                    xmax,
+                    perihel,
+                    ex,
+                    loc):
+
+    flux = flux_front+flux_side
+    plt.plot(flux_front[xmin:xmax],label="rad")
+    plt.plot(flux_side[xmin:xmax],label="azim")
+    plt.plot(flux[xmin:xmax],label="tot")
+    plt.legend()
+    plt.ylim(bottom=0)
+    plt.suptitle(f"peri: {perihel}; ecc: {ex}")
+    plt.savefig(loc+f"{perihel}th_peri_{ex}"+".png",dpi=1200)
+    plt.show()
+
+
+def main(ex=0.01,loc=figures_location):
     data = load_data(which="psp",r_min=0,r_max=0.5)
     perihelia = get_approaches(psp_ephemeris_file)[:16]
 
-    flux = bound_flux_vectorized(
+    flux_front = bound_flux_vectorized(
         r_vector = data["r_sc"].to_numpy(),
         v_r_vector = data["v_sc_r"].to_numpy(),
         v_phi_vector = data["v_sc_t"].to_numpy(),
         S_front_vector = data["area_front"].to_numpy(),
         S_side_vector = data["area_side"].to_numpy()*0,
-        e = e,
+        ex = ex,
         beta = 0,
         gamma = -1.3,
-        A = 1e4)
-    plt.plot(flux)
-    plt.show()
-
-    flux = bound_flux_vectorized(
+        A = 1e-8)
+    flux_side = bound_flux_vectorized(
         r_vector = data["r_sc"].to_numpy(),
         v_r_vector = data["v_sc_r"].to_numpy(),
         v_phi_vector = data["v_sc_t"].to_numpy(),
         S_front_vector = data["area_front"].to_numpy()*0,
         S_side_vector = data["area_side"].to_numpy(),
-        e = e,
+        ex = ex,
         beta = 0,
         gamma = -1.3,
-        A = 1e4)
-    plt.plot(flux)
-    plt.show()
+        A = 1e-8)
 
-    plot_maxima_zoom(data,perihelia,flux,e,filename=f"eccentricity_{e}")
+    plot_perihelion(flux_front,flux_side,0,100,1,ex,loc)
+    plot_perihelion(flux_front,flux_side,300,400,4,ex,loc)
+    plot_perihelion(flux_front,flux_side,520,600,6,ex,loc)
+    plot_perihelion(flux_front,flux_side,700,800,8,ex,loc)
+    plot_perihelion(flux_front,flux_side,900,950,10,ex,loc)
+
+    #plot_maxima_zoom(data,perihelia,flux,e,filename=f"eccentricity_{e}")
 
 
 
@@ -165,5 +189,9 @@ def main(e=0.01):
 #%%
 if __name__ == "__main__":
 
-    main()
+    loc = os.path.join(figures_location,"eccentricity")
+    for ex in [0.0001,0.01,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5]:
+        main(ex=ex,loc=loc)
+
+
 
