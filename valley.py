@@ -195,7 +195,9 @@ if __name__ == "__main__":
 
     v_b_r_res = int(sys.argv[1])
     e_v_res = int(sys.argv[2])
+    nsteps = int(sys.argv[3])
 
     results = main(v_b_r_grid = np.linspace(10, 200, num=v_b_r_res),
-                   e_v_grid = np.linspace(1e-3, 3.5, num=e_v_res))
+                   e_v_grid = np.linspace(1e-3, 3.5, num=e_v_res),
+                   nsteps = nsteps)
 
