@@ -1238,7 +1238,7 @@ if __name__ == "__main__":
 
     r_files = glob.glob(os.path.join("998_generated","inla",
                                      "solo_psp_together_*.RData"))
-    r_files = [file for file in r_files if "broader_speed_new" in file]
+    r_files = [file for file in r_files if "_60" in file]
     r_filepath = r_files[-1]
     csv_input_solo_path = os.path.join("data_synced","solo_flux_readable.csv")
     csv_input_psp_path = os.path.join("data_synced","psp_flux_readable.csv")

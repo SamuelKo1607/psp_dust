@@ -266,7 +266,7 @@ mydata = rbind(mydata_solo_replicated,mydata_psp)
 
 
 #filterinng to far-from the Sun only
-mydata <- subset(mydata, r > 0.4 & exposure > 1e-6)
+mydata <- subset(mydata, r > 0.4 & exposure > 1e-6)# & sc_id == 1 & Julian.date < 2459565)
 n = length(mydata$vr)
 mydata$idx = 1:n
 

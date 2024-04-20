@@ -315,7 +315,7 @@ def log_prior(theta,
 
     logpriors = [lambda x : stats.gamma.logpdf(x,a=5,scale=2e-5),
                  lambda x : stats.gamma.logpdf(x,a=5,scale=2e-5),
-                 lambda x : stats.gamma.logpdf(x,a=5,scale=1e-1),
+                 lambda x : stats.beta.logpdf((x-0.05)*5,3,3),
                  lambda x : stats.gamma.logpdf(x,a=5,scale=2e-1),
                  lambda x : stats.beta.logpdf(x,3,3),
                  lambda x : stats.beta.logpdf(x,3,3)]
@@ -444,7 +444,7 @@ def source_rate(v_sc_r, v_sc_t,
     rate_bound = (area
                   * n_sc
                   * (v_impact_bound*1000)
-                  * v_factor**(e_v)
+                  * v_factor**1#(e_v)
                   * 3600) #[/hour]
 
     hourly_rate = rate_beta + rate_bound
@@ -867,14 +867,14 @@ if __name__ == "__main__":
     pass
 
     sampled = main(goal_length=1e5,
-                   burnin=10000,
+                   burnin=20000,
                    theta0 = [1e-4,
                              1e-4,
                              0.2,
                              1.,
                              0.2,
                              0.5],
-                    filename = "first_try")
+                    filename = "fourth_try")
 
 
 
