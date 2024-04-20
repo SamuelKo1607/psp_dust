@@ -743,7 +743,13 @@ def log_likelihood(theta,
 
 def proposal(theta,
              scale=1,
-             family="normal"):
+             family="normal",
+             vary_l_a=True,
+             vary_l_b=True,
+             vary_v_b_r=True,
+             vary_e_v=True,
+             vary_e_b_r=True,
+             vary_shield_miss_rate=True):
     """
     Generates a new theta (proposal value for MH) and checks that it is 
     actually within allowed values (prior).
@@ -752,13 +758,28 @@ def proposal(theta,
     ----------
     theta : list
         Old theta.
-    
     scale : float, optional
         The scale of change, smaller means smaller deviation of the proposal.
-
     family : str, optional
         The family of the proposal. One of "normal", "uniform". 
         The default is "normal."
+    vary_l_a : bool, optional
+        Whether to vary this parameter. The default is True.
+    vary_l_b : bool, optional
+        Whether to vary this parameter. The default is True.
+    vary_v_b_r : bool, optional
+        Whether to vary this parameter. The default is True.
+    vary_e_v : bool, optional
+        Whether to vary this parameter. The default is True.
+    vary_e_b_r : bool, optional
+        Whether to vary this parameter. The default is True.
+    vary_shield_miss_rate : bool, optional
+        Whether to vary this parameter. The default is True.
+
+    Raises
+    ------
+    Exception
+        if the requested family is not defined.
 
     Returns
     -------
@@ -775,12 +796,14 @@ def proposal(theta,
             rand = np.random.uniform(-1,1,size=len(theta))
         else:
             raise Exception(f"unknonwn family: {family}")
-        proposed_l_a = theta[0] + rand[0] * 2e-5 * scale
-        proposed_l_b = theta[1] + rand[1] * 2e-5 * scale
-        proposed_v_b_r = theta[2] + rand[2] * 10 * scale
-        proposed_e_v = theta[3] + rand[3] * 0.1 * scale
-        proposed_e_b_r = theta[4] + rand[4] * 0.05 * scale
-        proposed_shield_miss_rate = theta[5] + rand[0] * 0.02 * scale
+
+        proposed_l_a = theta[0] + rand[0] * 2e-5 * scale * vary_l_a
+        proposed_l_b = theta[1] + rand[1] * 2e-5 * scale * vary_l_b
+        proposed_v_b_r = theta[2] + rand[2] * 10 * scale * vary_v_b_r
+        proposed_e_v = theta[3] + rand[3] * 0.1 * scale * vary_e_v
+        proposed_e_b_r = theta[4] + rand[4] * 0.05 * scale * vary_e_b_r
+        proposed_shield_miss_rate = (theta[5]
+            + rand[0] * 0.02 * scale * vary_shield_miss_rate)
     
         proposed_theta = [proposed_l_a,
                           proposed_l_b,
