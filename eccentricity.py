@@ -150,6 +150,18 @@ def plot_perihelion(flux_front,
     plt.show()
 
 
+def density_scaling(gamma=-1.3,
+                    ex=0,
+                    r_min=0.04,
+                    r_max=1.1,
+                    size=1000000):
+
+    r_peri_proposed = np.random.uniform(r_min,r_max,size)
+    thresholds = ((r_peri_proposed)**(2-gamma))/(r_max**(2-gamma))
+    r_peri = r_peri_proposed[thresholds > np.random.uniform(0,1,size)]
+
+
+
 def main(ex=0.01,loc=figures_location):
     data = load_data(which="psp",r_min=0,r_max=0.5)
     perihelia = get_approaches(psp_ephemeris_file)[:16]
@@ -163,7 +175,7 @@ def main(ex=0.01,loc=figures_location):
         ex = ex,
         beta = 0,
         gamma = -1.3,
-        A = 1e-8)
+        n = 1e-8)
     flux_side = bound_flux_vectorized(
         r_vector = data["r_sc"].to_numpy(),
         v_r_vector = data["v_sc_r"].to_numpy(),
@@ -173,7 +185,7 @@ def main(ex=0.01,loc=figures_location):
         ex = ex,
         beta = 0,
         gamma = -1.3,
-        A = 1e-8)
+        n = 1e-8)
 
     plot_perihelion(flux_front,flux_side,0,100,1,ex,loc)
     plot_perihelion(flux_front,flux_side,300,400,4,ex,loc)
@@ -190,7 +202,7 @@ def main(ex=0.01,loc=figures_location):
 if __name__ == "__main__":
 
     loc = os.path.join(figures_location,"eccentricity")
-    for ex in [0.0001,0.01,0.1,0.15,0.2,0.25,0.3,0.35,0.4,0.45,0.5]:
+    for ex in [0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4]:
         main(ex=ex,loc=loc)
 
 

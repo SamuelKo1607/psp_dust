@@ -111,7 +111,7 @@ def bound_flux(r,v_r,v_phi,
                ex=1e-2,
                beta=0,
                gamma=-1.3,
-               A=1):
+               n=1e-8):
     """
     The wrapper for the total bound flux observed, 
     given the dust parameters and the sc state.
@@ -128,16 +128,16 @@ def bound_flux(r,v_r,v_phi,
         SC front-side cross section [m^2].
     S_side : float
         SC lateral cross section [m^2].
-    e : float, optional
+    ex : float, optional
         Dust eccentricity. The default is 0.
     beta : float, optional
         Dust beta parameter. The default is 0.
     gamma : float, optional
         Bound dust radial spatial density exponent. 
         The default is -1.3.
-    A : float, optional
-        Multiplicative constant. 
-        The default is 1.
+    n : float, optional
+        Dust number density [m^-3] at 1AU. 
+        The default is 1e-8.
 
     Returns
     -------
@@ -152,6 +152,10 @@ def bound_flux(r,v_r,v_phi,
 
     mu = (1-beta)*GM
     prefactor = (((r_si**2)/(mu*(1+ex)))**gamma)
+    A = ( ((2*gamma+1)*((1+ex)**gamma)/((1+ex)**(gamma+1/2)-
+                                       (1-ex)**(gamma+1/2)))
+          *(AU/GM)**(1/2) ) * n
+
 
     total_flux = A / AU**gamma * prefactor * (
                   S_side * azimuthal_flux(r_si,v_phi_si,ex,mu,gamma)
@@ -166,7 +170,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                           ex=1e-2,
                           beta=0,
                           gamma=-1.3,
-                          A=1):
+                          n=1):
     """
     A vectorizer for bound_flux function.
 
@@ -182,16 +186,16 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
         SC front-side cross section [m^2].
     S_side : np.array of float
         SC lateral cross section [m^2].
-    e : float, optional
+    ex : float, optional
         Dust eccentricity. The default is 0.
     beta : float, optional
         Dust beta parameter. The default is 0.
     gamma : float, optional
         Bound dust radial spatial density exponent. 
         The default is -1.3.
-    A : float, optional
-        Multiplicative constant. 
-        The default is 1.
+    n : float, optional
+        Dust number density [m^-3] at 1AU. 
+        The default is 1e-8.
 
     Returns
     -------
@@ -212,7 +216,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                                            v_phi,
                                            S_front,
                                            S_side,
-                                           ex,beta,gamma,A))
+                                           ex,beta,gamma,n))
     return flux_vector
 
 
