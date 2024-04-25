@@ -235,6 +235,10 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
                            psp_df["Radial velocity [km/s]"])
         v_sc_t = np.append(solo_df["Tangential velocity [km/s]"],
                            psp_df["Tangential velocity [km/s]"])
+        v_sc_x = np.append(solo_df["V_X (HAE) [km/s]"],
+                           psp_df["V_X (HAE) [km/s]"])
+        v_sc_y = np.append(solo_df["V_Y (HAE) [km/s]"],
+                           psp_df["V_Y (HAE) [km/s]"])
         v_sc_z = np.append(solo_df["V_Z (HAE) [km/s]"],
                            psp_df["V_Z (HAE) [km/s]"])
         r_sc = np.append(solo_df["Radial distance [au]"],
@@ -254,6 +258,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
     elif which=="solo":
         v_sc_r = np.array(solo_df["Radial velocity [km/s]"])
         v_sc_t = np.array(solo_df["Tangential velocity [km/s]"])
+        v_sc_x = np.array(solo_df["V_X (HAE) [km/s]"])
+        v_sc_y = np.array(solo_df["V_Y (HAE) [km/s]"])
         v_sc_z = np.array(solo_df["V_Z (HAE) [km/s]"])
         r_sc = np.array(solo_df["Radial distance [au]"])
         area_front = np.array(10.34 * np.ones(len(solo_df.index)))
@@ -265,6 +271,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
     elif which=="psp":
         v_sc_r = np.array(psp_df["Radial velocity [km/s]"])
         v_sc_t = np.array(psp_df["Tangential velocity [km/s]"])
+        v_sc_x = np.array(psp_df["V_X (HAE) [km/s]"])
+        v_sc_y = np.array(psp_df["V_Y (HAE) [km/s]"])
         v_sc_z = np.array(psp_df["V_Z (HAE) [km/s]"])
         r_sc = np.array(psp_df["Radial distance [au]"])
         area_front = np.array(6.11 * np.ones(len(psp_df.index)))
@@ -278,6 +286,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
 
     data = pd.DataFrame(data=np.array([v_sc_r,
                                        v_sc_t,
+                                       v_sc_x,
+                                       v_sc_y,
                                        v_sc_z,
                                        r_sc,
                                        area_front,
@@ -289,6 +299,8 @@ def load_data(solo_file=os.path.join("data_synced","solo_flux_readable.csv"),
                         index=np.arange(len(v_sc_r),dtype=int),
                         columns=["v_sc_r",
                                  "v_sc_t",
+                                 "v_sc_x",
+                                 "v_sc_y",
                                  "v_sc_z",
                                  "r_sc",
                                  "area_front",
