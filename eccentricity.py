@@ -11,6 +11,7 @@ from ephemeris import get_approaches
 from load_data import encounter_group
 from conversions import jd2date
 from overplot_with_solo_result import get_detection_errors
+from conversions import GM, AU
 
 from paths import psp_ephemeris_file
 from paths import figures_location
@@ -136,6 +137,7 @@ def plot_perihelion(flux_front,
                     xmin,
                     xmax,
                     perihel,
+                    perihel_index,
                     ex,
                     loc):
 
@@ -143,6 +145,7 @@ def plot_perihelion(flux_front,
     plt.plot(flux_front[xmin:xmax],label="rad")
     plt.plot(flux_side[xmin:xmax],label="azim")
     plt.plot(flux[xmin:xmax],label="tot")
+    plt.vlines(perihel_index,0,1.1*np.max(flux[xmin:xmax]),color="tab:red")
     plt.legend()
     plt.ylim(bottom=0)
     plt.suptitle(f"peri: {perihel}; ecc: {ex}")
@@ -150,48 +153,98 @@ def plot_perihelion(flux_front,
     plt.show()
 
 
+@jit
+def r_smear_prob(r,r_peri,ex):
+    r_aph = ((1+ex)/(1-ex))*r_peri
+    if r<r_peri or r>r_aph:
+        return 0
+    else:
+        return np.sqrt((2/r-(1-ex)/r_peri-((1+ex)*r_peri)/(r**2)))**(-1)
+
+
+@jit
+def r_smearing(r_peri,
+               ex,
+               size=10,
+               burnin=10):
+    r_aph = ((1+ex)/(1-ex))*r_peri
+    r = np.random.uniform(r_peri,r_aph)
+    proposal_width = (r_aph - r_peri)/5
+    sampled=np.zeros(0)
+    for i in range(size+burnin):
+        sampled = np.append(sampled,r)
+        r_proposal = r+np.random.uniform(-proposal_width/2,proposal_width/2)
+        goodness = (r_smear_prob(r_proposal,r_peri,ex)
+                    /r_smear_prob(r,r_peri,ex))
+        if goodness > np.random.random():
+            r = r_proposal
+    return sampled
+
+
 def density_scaling(gamma=-1.3,
                     ex=0,
                     r_min=0.04,
                     r_max=1.1,
-                    size=1000000):
+                    size=10000,
+                    mu=GM):
 
     r_peri_proposed = np.random.uniform(r_min,r_max,size)
-    thresholds = ((r_peri_proposed)**(2-gamma))/(r_max**(2-gamma))
+    thresholds = ((r_peri_proposed)**(2+gamma))/(r_max**(2+gamma))
     r_peri = r_peri_proposed[thresholds > np.random.uniform(0,1,size)]
 
 
 
-def main(ex=0.01,loc=figures_location):
+
+
+
+def main(ex=0.01,
+         gamma=-1.3,
+         loc=figures_location):
     data = load_data(which="psp",r_min=0,r_max=0.5)
     perihelia = get_approaches(psp_ephemeris_file)[:16]
 
-    flux_front = bound_flux_vectorized(
-        r_vector = data["r_sc"].to_numpy(),
-        v_r_vector = data["v_sc_r"].to_numpy(),
-        v_phi_vector = data["v_sc_t"].to_numpy(),
-        S_front_vector = data["area_front"].to_numpy(),
-        S_side_vector = data["area_side"].to_numpy()*0,
-        ex = ex,
-        beta = 0,
-        gamma = -1.3,
-        n = 1e-8)
-    flux_side = bound_flux_vectorized(
-        r_vector = data["r_sc"].to_numpy(),
-        v_r_vector = data["v_sc_r"].to_numpy(),
-        v_phi_vector = data["v_sc_t"].to_numpy(),
-        S_front_vector = data["area_front"].to_numpy()*0,
-        S_side_vector = data["area_side"].to_numpy(),
-        ex = ex,
-        beta = 0,
-        gamma = -1.3,
-        n = 1e-8)
+    r_vector = data["r_sc"].to_numpy()
+    v_r_vector = data["v_sc_r"].to_numpy()
+    v_phi_vector = (data["v_sc_t"].to_numpy()**2
+                    -data["v_sc_z"].to_numpy()**2)**0.5
+    S_front_vector = data["area_front"].to_numpy()
+    S_side_vector = data["area_side"].to_numpy()
 
-    plot_perihelion(flux_front,flux_side,0,100,1,ex,loc)
-    plot_perihelion(flux_front,flux_side,300,400,4,ex,loc)
-    plot_perihelion(flux_front,flux_side,520,600,6,ex,loc)
-    plot_perihelion(flux_front,flux_side,700,800,8,ex,loc)
-    plot_perihelion(flux_front,flux_side,900,950,10,ex,loc)
+    flux_front = bound_flux_vectorized(
+        r_vector = r_vector,
+        v_r_vector = v_r_vector,
+        v_phi_vector = v_phi_vector,
+        S_front_vector = S_front_vector,
+        S_side_vector = S_side_vector*0,
+        ex = ex,
+        beta = 0,
+        gamma = gamma,
+        n = 7e-9)
+    flux_side = bound_flux_vectorized(
+        r_vector = r_vector,
+        v_r_vector = v_r_vector,
+        v_phi_vector = v_phi_vector,
+        S_front_vector = S_front_vector*0,
+        S_side_vector = S_side_vector,
+        ex = ex,
+        beta = 0,
+        gamma = gamma,
+        n = 7e-9)
+
+    for bounds,peri in zip([(0,100),
+                            (300,400),
+                            (520,600),
+                            (700,800,
+                            (900,950))],[1,
+                                         4,
+                                         6,
+                                         8,
+                                         10]):
+        peri_index = np.argmin(r_vector[bounds[0]:bounds[1]])
+        plot_perihelion(flux_front,flux_side,
+                        bounds[0],bounds[1],
+                        peri,peri_index,
+                        ex,loc)
 
     #plot_maxima_zoom(data,perihelia,flux,e,filename=f"eccentricity_{e}")
 
@@ -202,7 +255,7 @@ def main(ex=0.01,loc=figures_location):
 if __name__ == "__main__":
 
     loc = os.path.join(figures_location,"eccentricity")
-    for ex in [0.05,0.1,0.15,0.2,0.25,0.3,0.35,0.4]:
+    for ex in [0.001,0.1,0.2,0.3,0.4]:
         main(ex=ex,loc=loc)
 
 

@@ -31,8 +31,8 @@ def azimuthal_flux(r_si,v_phi_si,
 
     """
     def indefinite(x):
-        a = (x**(2*gamma+2))/(2*gamma+2)
-        b = v_phi_si*(x**(2*gamma+1))/(2*gamma+1)
+        a = (x**(gamma+2))/(gamma+2)
+        b = v_phi_si*(x**(gamma+1))/(gamma+1)
         return a-b
 
     j_plus = ( indefinite(np.max(np.array([v_phi_si,
@@ -89,16 +89,16 @@ def radial_flux(r_si,v_r_si,
                   )**0.5/(x*r_si)
 
     j_plus_pre = V * np.average(
-         +1*(x**(2*gamma))*( - good_chunk - v_r_si )
+         +1*(x**(gamma))*( - good_chunk - v_r_si )
          * ( ( - good_chunk - v_r_si)>0 ) )
     j_plus_post = V * np.average(
-         +1*(x**(2*gamma))*( + good_chunk - v_r_si )
+         +1*(x**(gamma))*( + good_chunk - v_r_si )
          * ( ( + good_chunk - v_r_si)>0 ) )
     j_minus_pre = V * np.average(
-         -1*(x**(2*gamma))*( - good_chunk - v_r_si )
+         -1*(x**(gamma))*( - good_chunk - v_r_si )
          * ( ( + good_chunk + v_r_si)>0 ) )
     j_minus_post = V * np.average(
-         -1*(x**(2*gamma))*( + good_chunk - v_r_si )
+         -1*(x**(gamma))*( + good_chunk - v_r_si )
          * ( ( - good_chunk + v_r_si)>0 ) )
 
     j_tot = 0.5 * (j_plus_pre + j_plus_post + j_minus_pre + j_minus_post)
@@ -151,13 +151,11 @@ def bound_flux(r,v_r,v_phi,
     v_phi_si = v_phi * 1000 #[m/s]
 
     mu = (1-beta)*GM
-    prefactor = (((r_si**2)/(mu*(1+ex)))**gamma)
-    A = ( ((2*gamma+1)*((1+ex)**gamma)/((1+ex)**(gamma+1/2)-
-                                       (1-ex)**(gamma+1/2)))
-          *(AU/GM)**(1/2) ) * n
+    C = n * ((r_si/AU)**gamma) * ((AU/mu)**((gamma+1)/2)) * ((gamma+1)/
+            ((1+ex)**((gamma+1)/2) - (1-ex)**((gamma+1)/2)))
 
 
-    total_flux = A / AU**gamma * prefactor * (
+    total_flux = C * (
                   S_side * azimuthal_flux(r_si,v_phi_si,ex,mu,gamma)
                 + S_front * radial_flux(r_si,v_r_si,ex,mu,gamma) )
 
