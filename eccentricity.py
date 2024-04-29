@@ -1,13 +1,14 @@
 import os
 import numpy as np
+import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime as dt
 from numba import jit
 
 from eccentricity_core import bound_flux_vectorized
-from mcmc import load_data
 from ephemeris import get_approaches
+from ephemeris import load_ephemeris
 from load_data import encounter_group
 from conversions import jd2date
 from overplot_with_solo_result import get_detection_errors
@@ -141,10 +142,11 @@ def plot_perihelion(flux_front,
                     ex,
                     loc):
 
+    x = np.arange(xmin,xmax)
     flux = flux_front+flux_side
-    plt.plot(flux_front[xmin:xmax],label="rad")
-    plt.plot(flux_side[xmin:xmax],label="azim")
-    plt.plot(flux[xmin:xmax],label="tot")
+    plt.plot(x,flux_front[xmin:xmax],label="rad")
+    plt.plot(x,flux_side[xmin:xmax],label="azim")
+    plt.plot(x,flux[xmin:xmax],label="tot")
     plt.vlines(perihel_index,0,1.1*np.max(flux[xmin:xmax]),color="tab:red")
     plt.legend()
     plt.ylim(bottom=0)
@@ -155,6 +157,25 @@ def plot_perihelion(flux_front,
 
 @jit
 def r_smear_prob(r,r_peri,ex):
+    """
+    The pdf of where the grain will be found (r) given its perihel (r_peri)
+    and eccentricity (ex).
+
+    Parameters
+    ----------
+    r : float
+        Heliocentric distance [AU], the indep. variable of the pdf.
+    r_peri : float
+        Perihelion distance [AU].
+    ex : float
+        Eccentricity.
+
+    Returns
+    -------
+    float
+        The pdf at the ditance r.
+
+    """
     r_aph = ((1+ex)/(1-ex))*r_peri
     if r<r_peri or r>r_aph:
         return 0
@@ -193,22 +214,91 @@ def density_scaling(gamma=-1.3,
     r_peri = r_peri_proposed[thresholds > np.random.uniform(0,1,size)]
 
 
+def load_ephem_data(ephemeris_file,
+                    r_min=0,
+                    r_max=0.5,
+                    decimation=4):
+    """
+    Reads the ephemerides, returns distance, speeds while disregarding 
+    the "z" component.
+
+    Parameters
+    ----------
+    ephemeris_file : str
+        Location of the ephemerides file.
+    r_min : float, optional
+        The minimum (exclusive) heliocentric distance. The default is 0.
+    r_max : float, optional
+        The maximum (exclusive) heliocentric distance. The default is 0.5.
+    decimation : int, optional
+        How much to decimate the data. The default is 4 = every 4th is kept.
+
+    Returns
+    -------
+    data : pd.df
+        All the data which "main" needs.
+
+    """
+    (jd,
+     hae,
+     hae_v,
+     hae_phi,
+     radial_v,
+     tangential_v,
+     hae_theta,
+     v_phi,
+     v_theta) = load_ephemeris(psp_ephemeris_file)
+
+    x = hae[:,0]/(AU/1000)
+    y = hae[:,1]/(AU/1000)
+    z = hae[:,2]/(AU/1000)
+
+    v_sc_r = np.zeros(len(x))
+    v_sc_t = np.zeros(len(x))
+    for i in range(len(x)):
+        unit_radial = hae[i,0:2]/np.linalg.norm(hae[i,0:2])
+        v_sc_r[i] = np.inner(unit_radial,hae_v[i,0:2])
+        v_sc_t[i] = np.linalg.norm(hae_v[i,0:2]-radial_v[i]*unit_radial)
+    r_sc = np.sqrt(x**2+y**2)
+    area_front = np.ones(len(x))*6.11
+    area_side = np.ones(len(x))*4.62
+
+    data = pd.DataFrame(data=np.array([v_sc_r,
+                                       v_sc_t,
+                                       r_sc,
+                                       area_front,
+                                       area_side,
+                                       jd]).transpose(),
+                        index=np.arange(len(r_sc),dtype=int),
+                        columns=["v_sc_r",
+                                 "v_sc_t",
+                                 "r_sc",
+                                 "area_front",
+                                 "area_side",
+                                 "jd"])
+
+    data = data[data["r_sc"]>r_min]
+    data = data[data["r_sc"]<r_max]
+    data = data[data.index % decimation == 0]
+
+    return data
 
 
 
 
-def main(ex=0.01,
+def main(data,
+         ex=0.01,
          gamma=-1.3,
          loc=figures_location):
-    data = load_data(which="psp",r_min=0,r_max=0.5)
+
     perihelia = get_approaches(psp_ephemeris_file)[:16]
 
     r_vector = data["r_sc"].to_numpy()
     v_r_vector = data["v_sc_r"].to_numpy()
-    v_phi_vector = (data["v_sc_t"].to_numpy()**2
-                    -data["v_sc_z"].to_numpy()**2)**0.5
+    v_phi_vector = (data["v_sc_t"].to_numpy())
     S_front_vector = data["area_front"].to_numpy()
     S_side_vector = data["area_side"].to_numpy()
+    jd = data["jd"].to_numpy()
 
     flux_front = bound_flux_vectorized(
         r_vector = r_vector,
@@ -231,16 +321,9 @@ def main(ex=0.01,
         gamma = gamma,
         n = 7e-9)
 
-    for bounds,peri in zip([(0,100),
-                            (300,400),
-                            (520,600),
-                            (700,800,
-                            (900,950))],[1,
-                                         4,
-                                         6,
-                                         8,
-                                         10]):
-        peri_index = np.argmin(r_vector[bounds[0]:bounds[1]])
+    for peri in [1,4,6,8,10]:
+        peri_index = np.argmin(np.abs(jd-perihelia[peri]))
+        bounds = (peri_index-40,peri_index+40)
         plot_perihelion(flux_front,flux_side,
                         bounds[0],bounds[1],
                         peri,peri_index,
@@ -255,8 +338,9 @@ def main(ex=0.01,
 if __name__ == "__main__":
 
     loc = os.path.join(figures_location,"eccentricity")
+    data = load_ephem_data(psp_ephemeris_file)
     for ex in [0.001,0.1,0.2,0.3,0.4]:
-        main(ex=ex,loc=loc)
+        main(data=data,ex=ex,loc=loc)
 
 
 
