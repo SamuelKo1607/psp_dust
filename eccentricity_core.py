@@ -218,7 +218,72 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
     return flux_vector
 
 
+@jit
+def r_smear_prob(r,r_peri,ex):
+    """
+    The pdf of where the grain will be found (r) given its perihel (r_peri)
+    and eccentricity (ex).
 
+    Parameters
+    ----------
+    r : float
+        Heliocentric distance [AU], the indep. variable of the pdf.
+    r_peri : float
+        Perihelion distance [AU].
+    ex : float
+        Eccentricity.
+
+    Returns
+    -------
+    float
+        The pdf at the ditance r.
+
+    """
+    r_aph = ((1+ex)/(1-ex))*r_peri
+    if r<r_peri or r>r_aph:
+        return 0
+    else:
+        return np.sqrt((2/r-(1-ex)/r_peri-((1+ex)*r_peri)/(r**2)))**(-1)
+
+
+@jit
+def r_smearing(r_peri,
+               ex,
+               size=10,
+               burnin=10):
+    """
+    An MCMC procedure to provide a sample of actual immediate 
+    heliocentric distances, given the perihelion and eccentricity.
+
+    Parameters
+    ----------
+    r_peri : float
+        Perihelion distance [AU].
+    ex : float
+        Eccentricity [1].
+    size : int, optional
+        The number of samples needed. The default is 10.
+    burnin : int, optional
+        The burnin length. The default is 10.
+
+    Returns
+    -------
+    sampled : np.array of float
+        The sampled heliocentric distances.
+
+    """
+    r_aph = ((1+ex)/(1-ex))*r_peri
+    r = np.random.uniform(r_peri,r_aph)
+    proposal_width = (r_aph - r_peri)/5
+    sampled=np.zeros(0)
+    for i in range(size+burnin):
+        sampled = np.append(sampled,r)
+        r_proposal = r+np.random.uniform(-proposal_width/2,proposal_width/2)
+        goodness = (r_smear_prob(r_proposal,r_peri,ex)
+                    /r_smear_prob(r,r_peri,ex))
+        if goodness > np.random.random():
+            r = r_proposal
+    return sampled[burnin:]
 
 
 """

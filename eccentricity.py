@@ -5,8 +5,10 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime as dt
 from numba import jit
+from tqdm.auto import tqdm
 
 from eccentricity_core import bound_flux_vectorized
+from eccentricity_core import r_smearing
 from ephemeris import get_approaches
 from ephemeris import load_ephemeris
 from load_data import encounter_group
@@ -135,83 +137,107 @@ def plot_maxima_zoom(data,
 
 def plot_perihelion(flux_front,
                     flux_side,
+                    r,
+                    v_r,
+                    v_phi,
                     xmin,
                     xmax,
                     perihel,
-                    perihel_index,
                     ex,
                     loc):
 
-    x = np.arange(xmin,xmax)
+    x = (np.arange(xmin,xmax)-(xmin+xmax)/2)/3
     flux = flux_front+flux_side
-    plt.plot(x,flux_front[xmin:xmax],label="rad")
-    plt.plot(x,flux_side[xmin:xmax],label="azim")
-    plt.plot(x,flux[xmin:xmax],label="tot")
-    plt.vlines(perihel_index,0,1.1*np.max(flux[xmin:xmax]),color="tab:red")
-    plt.legend()
-    plt.ylim(bottom=0)
-    plt.suptitle(f"peri: {perihel}; ecc: {ex}")
-    plt.savefig(loc+f"{perihel}th_peri_{ex}"+".png",dpi=1200)
+    fig, ax1 = plt.subplots()
+    ax2 = ax1.twinx()
+    ax1.plot(x,flux_front[xmin:xmax],label="rad")
+    ax1.plot(x,flux_side[xmin:xmax],label="azim")
+    ax1.plot(x,flux[xmin:xmax],label="tot")
+    ax1.vlines(0,0,1.1*np.max(flux[xmin:xmax]),color="tab:red")
+    ax1.legend()
+    ax1.set_xlabel("Time since perihelion [d]")
+    ax1.set_ylabel("Dust detection rate [/s]")
+    ax2.set_ylabel("SC speed [km/s]")
+    ax2.hlines(0,min(x),max(x),color="grey",ls="dashed")
+    ax2.plot(x,v_r[xmin:xmax],color="black",label=r"$v_{rad}$")
+    ax2.plot(x,v_phi[xmin:xmax],color="grey",label=r"$v_{azim}$")
+    ax2.legend(loc=0)
+    ax1.set_ylim(bottom=0)
+    ax1.set_xlim(min(x),max(x))
+    fig.suptitle(f"peri: {perihel}; ecc: {ex}")
+    fig.tight_layout()
+    if loc is not None:
+        plt.savefig(loc+f"{perihel}th_peri_{ex}"+".png",dpi=1200)
     plt.show()
 
 
-@jit
-def r_smear_prob(r,r_peri,ex):
+def density_scaling(gamma=-1.3,
+                    ex=0.001,
+                    r_min=0.04,
+                    r_max=1.1,
+                    size=50000,
+                    mu=GM,
+                    loc=figures_location):
     """
-    The pdf of where the grain will be found (r) given its perihel (r_peri)
-    and eccentricity (ex).
+    Analyzes if the slope of heliocentric distance distribution 
+    has changed or not.
 
     Parameters
     ----------
-    r : float
-        Heliocentric distance [AU], the indep. variable of the pdf.
-    r_peri : float
-        Perihelion distance [AU].
-    ex : float
-        Eccentricity.
+    gamma : float, optional
+        The slope. The default is -1.3.
+    ex : float, optional
+        Eccentricity. The default is 0.001.
+    r_min : float, optional
+        min perihelion. The default is 0.04.
+    r_max : float, optional
+        max perihelion. The default is 1.1.
+    size : int, optional
+        number of sampled orbits. The default is 50000.
+    mu : float, optional
+        gravitational parameter. The default is GM.
+    loc : str, optional
+        Figure target directory. The default is figures_location.
 
     Returns
     -------
-    float
-        The pdf at the ditance r.
+    None.
 
     """
-    r_aph = ((1+ex)/(1-ex))*r_peri
-    if r<r_peri or r>r_aph:
-        return 0
-    else:
-        return np.sqrt((2/r-(1-ex)/r_peri-((1+ex)*r_peri)/(r**2)))**(-1)
 
-
-@jit
-def r_smearing(r_peri,
-               ex,
-               size=10,
-               burnin=10):
-    r_aph = ((1+ex)/(1-ex))*r_peri
-    r = np.random.uniform(r_peri,r_aph)
-    proposal_width = (r_aph - r_peri)/5
-    sampled=np.zeros(0)
-    for i in range(size+burnin):
-        sampled = np.append(sampled,r)
-        r_proposal = r+np.random.uniform(-proposal_width/2,proposal_width/2)
-        goodness = (r_smear_prob(r_proposal,r_peri,ex)
-                    /r_smear_prob(r,r_peri,ex))
-        if goodness > np.random.random():
-            r = r_proposal
-    return sampled
-
-
-def density_scaling(gamma=-1.3,
-                    ex=0,
-                    r_min=0.04,
-                    r_max=1.1,
-                    size=10000,
-                    mu=GM):
-
-    r_peri_proposed = np.random.uniform(r_min,r_max,size)
-    thresholds = ((r_peri_proposed)**(2+gamma))/(r_max**(2+gamma))
+    r_peri_proposed = np.random.uniform(r_min/3,r_max,size)
+    thresholds = ((r_peri_proposed)**(gamma+1))/max(r_peri_proposed**(gamma+1))
     r_peri = r_peri_proposed[thresholds > np.random.uniform(0,1,size)]
+    spreaded = np.zeros(0)
+    all_sampled = []
+    for r in tqdm(r_peri):
+        samples = r_smearing(r,ex,size=1000,burnin=200)
+        all_sampled.append(samples)
+    spreaded = np.reshape(all_sampled,newshape=(1000*len(r_peri)))
+
+    bins = np.linspace(r_min,r_max,int((size/10)**0.5))
+    bincenters = (bins[1:]+bins[:-1])/2
+
+    hist_orig = np.histogram(r_peri,bins,weights=r_peri**(-gamma-1))
+    hist_mod = np.histogram(spreaded,bins,weights=spreaded**(-gamma-1))
+
+    fig,ax = plt.subplots()
+    ax.hlines(1,r_min,r_max,"grey")
+    ax.step(bincenters, hist_orig[0]/np.mean(hist_orig[0]),
+            where='mid', label="starting")
+    ax.step(bincenters, hist_mod[0]/np.mean(hist_mod[0]),
+            where='mid', label="smeared")
+    ax.legend(fontsize="small")
+    ax.text(0.1,1.15,rf"e = {ex}, $\gamma$ = {gamma}")
+    ax.set_xlabel("Heliocentric distance [AU]")
+    ax.set_ylabel(r"$\gamma$-compensated pdf [arb.u.]")
+    ax.set_ylim(0.8,1.2)
+    ax.set_xlim(r_min,r_max)
+    ax.set_aspect(1.5)
+    fig.tight_layout()
+    if loc is not None:
+        plt.savefig(loc+f"spred_{gamma}_{ex}"+".png",dpi=1200)
+    plt.show()
 
 
 def load_ephem_data(ephemeris_file,
@@ -247,11 +273,21 @@ def load_ephem_data(ephemeris_file,
      tangential_v,
      hae_theta,
      v_phi,
-     v_theta) = load_ephemeris(psp_ephemeris_file)
+     v_theta) = load_ephemeris(os.path.join("data_synced",
+                                         "psp_ephemeris_noheader.txt"))#psp_ephemeris_file)
 
-    x = hae[:,0]/(AU/1000)
+    x = hae[:,0]/(AU/1000) #AU
     y = hae[:,1]/(AU/1000)
     z = hae[:,2]/(AU/1000)
+
+    vx = hae_v[:,0] #km/s
+    vy = hae_v[:,1]
+    vz = hae_v[:,2]
+
+    # for i in [3,4]:
+    #     per = perihelia[i]
+    #     indices = indices = np.abs(jd-per)<5
+    #     plt.plot(r_sc[indices],v_tot[indices])
 
     v_sc_r = np.zeros(len(x))
     v_sc_t = np.zeros(len(x))
@@ -282,8 +318,6 @@ def load_ephem_data(ephemeris_file,
     data = data[data.index % decimation == 0]
 
     return data
-
-
 
 
 def main(data,
@@ -325,8 +359,9 @@ def main(data,
         peri_index = np.argmin(np.abs(jd-perihelia[peri]))
         bounds = (peri_index-40,peri_index+40)
         plot_perihelion(flux_front,flux_side,
+                        r_vector,v_r_vector,v_phi_vector,
                         bounds[0],bounds[1],
-                        peri,peri_index,
+                        peri,
                         ex,loc)
 
     #plot_maxima_zoom(data,perihelia,flux,e,filename=f"eccentricity_{e}")
@@ -337,10 +372,12 @@ def main(data,
 #%%
 if __name__ == "__main__":
 
-    loc = os.path.join(figures_location,"eccentricity")
-    data = load_ephem_data(psp_ephemeris_file)
+    loc = os.path.join(figures_location,"eccentricity","")
+    data = load_ephem_data(os.path.join("data_synced",
+                                        "psp_ephemeris_2_noheader.txt"))
     for ex in [0.001,0.1,0.2,0.3,0.4]:
-        main(data=data,ex=ex,loc=loc)
+        density_scaling(ex=ex,size=500000,loc=loc)
+        #main(data=data,ex=ex,loc=loc)
 
 
 
