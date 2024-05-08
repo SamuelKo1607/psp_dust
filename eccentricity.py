@@ -9,12 +9,14 @@ from tqdm.auto import tqdm
 
 from eccentricity_core import bound_flux_vectorized
 from eccentricity_core import r_smearing
+from eccentricity_core import velocity_verlet
 from ephemeris import get_approaches
 from ephemeris import load_ephemeris
 from load_data import encounter_group
 from conversions import jd2date
 from overplot_with_solo_result import get_detection_errors
 from conversions import GM, AU
+from conversions import date2jd, jd2date
 
 from paths import psp_ephemeris_file
 from paths import figures_location
@@ -135,42 +137,6 @@ def plot_maxima_zoom(data,
     fig.show()
 
 
-def plot_perihelion(flux_front,
-                    flux_side,
-                    r,
-                    v_r,
-                    v_phi,
-                    xmin,
-                    xmax,
-                    perihel,
-                    ex,
-                    loc):
-
-    x = (np.arange(xmin,xmax)-(xmin+xmax)/2)/3
-    flux = flux_front+flux_side
-    fig, ax1 = plt.subplots()
-    ax2 = ax1.twinx()
-    ax1.plot(x,flux_front[xmin:xmax],label="rad")
-    ax1.plot(x,flux_side[xmin:xmax],label="azim")
-    ax1.plot(x,flux[xmin:xmax],label="tot")
-    ax1.vlines(0,0,1.1*np.max(flux[xmin:xmax]),color="tab:red")
-    ax1.legend()
-    ax1.set_xlabel("Time since perihelion [d]")
-    ax1.set_ylabel("Dust detection rate [/s]")
-    ax2.set_ylabel("SC speed [km/s]")
-    ax2.hlines(0,min(x),max(x),color="grey",ls="dashed")
-    ax2.plot(x,v_r[xmin:xmax],color="black",label=r"$v_{rad}$")
-    ax2.plot(x,v_phi[xmin:xmax],color="grey",label=r"$v_{azim}$")
-    ax2.legend(loc=0)
-    ax1.set_ylim(bottom=0)
-    ax1.set_xlim(min(x),max(x))
-    fig.suptitle(f"peri: {perihel}; ecc: {ex}")
-    fig.tight_layout()
-    if loc is not None:
-        plt.savefig(loc+f"{perihel}th_peri_{ex}"+".png",dpi=1200)
-    plt.show()
-
-
 def density_scaling(gamma=-1.3,
                     ex=0.001,
                     r_min=0.04,
@@ -242,7 +208,7 @@ def density_scaling(gamma=-1.3,
 
 def load_ephem_data(ephemeris_file,
                     r_min=0,
-                    r_max=0.5,
+                    r_max=0.4,
                     decimation=4):
     """
     Reads the ephemerides, returns distance, speeds while disregarding 
@@ -265,6 +231,34 @@ def load_ephem_data(ephemeris_file,
         All the data which "main" needs.
 
     """
+
+    # ssb_ephem="psp_ssb_noheader.txt"
+    # sun_ephem="psp_sun_noheader.txt"
+
+    # ssb_ephem_file = os.path.join("data_synced",ssb_ephem)
+    # sun_ephem_file = os.path.join("data_synced",sun_ephem)
+    # sol_ephem_file = os.path.join("data_synced","sun_ssb_noheader.txt")
+
+    # ephem_sun = load_ephemeris(sun_ephem_file)
+    # hae_sun = ephem_sun[1]
+    # x_sun = hae_sun[:,0]/(AU/1000) #AU
+    # y_sun = hae_sun[:,1]/(AU/1000)
+    # z_sun = hae_sun[:,2]/(AU/1000)
+    # hae_v_sun = ephem_sun[2]
+    # vx_sun = hae_v_sun[:,0] #km/s
+    # vy_sun = hae_v_sun[:,1]
+    # vz_sun = hae_v_sun[:,2]
+
+    # ephem_sol = load_ephemeris(sol_ephem_file)
+    # hae_sol = ephem_sol[1]
+    # x_sol = hae_sol[:,0]/(AU/1000) #AU
+    # y_sol = hae_sol[:,1]/(AU/1000)
+    # z_sol = hae_sol[:,2]/(AU/1000)
+    # hae_v_sol = ephem_sol[2]
+    # vx_sol = hae_v_sol[:,0] #km/s
+    # vy_sol = hae_v_sol[:,1]
+    # vz_sol = hae_v_sol[:,2]
+
     (jd,
      hae,
      hae_v,
@@ -273,8 +267,7 @@ def load_ephem_data(ephemeris_file,
      tangential_v,
      hae_theta,
      v_phi,
-     v_theta) = load_ephemeris(os.path.join("data_synced",
-                                         "psp_ephemeris_noheader.txt"))#psp_ephemeris_file)
+     v_theta) = load_ephemeris(ephemeris_file)
 
     x = hae[:,0]/(AU/1000) #AU
     y = hae[:,1]/(AU/1000)
@@ -294,7 +287,7 @@ def load_ephem_data(ephemeris_file,
     for i in range(len(x)):
         unit_radial = hae[i,0:2]/np.linalg.norm(hae[i,0:2])
         v_sc_r[i] = np.inner(unit_radial,hae_v[i,0:2])
-        v_sc_t[i] = np.linalg.norm(hae_v[i,0:2]-radial_v[i]*unit_radial)
+        v_sc_t[i] = np.linalg.norm(hae_v[i,0:2]-v_sc_r[i]*unit_radial)
     r_sc = np.sqrt(x**2+y**2)
     area_front = np.ones(len(x))*6.11
     area_side = np.ones(len(x))*4.62
@@ -320,12 +313,71 @@ def load_ephem_data(ephemeris_file,
     return data
 
 
+def construct_perihel(jd_peri,
+                      n_peri,
+                      r_peri,
+                      v_peri,
+                      days=14,
+                      step_hours=1):
+    """
+    Cosntructs an artificial part of an orbit.
+
+    Parameters
+    ----------
+    jd_peri : TYPE
+        DESCRIPTION.
+    n_peri : TYPE
+        DESCRIPTION.
+    r_peri : TYPE
+        DESCRIPTION.
+    v_peri : TYPE
+        DESCRIPTION.
+    days : TYPE, optional
+        DESCRIPTION. The default is 14.
+
+    Returns
+    -------
+    data : pd.dataframe
+        The same as load_ephem_data() provides (AU, km/s).
+
+    """
+    r,v = velocity_verlet(r_peri,v_peri,days=days,step_hours=step_hours)
+    r = np.vstack((np.array([ 1,-1,-1])*np.flip(r,axis=0)[:-1,:],r))
+    v = np.vstack((np.array([-1, 1, 1])*np.flip(v,axis=0)[:-1,:],v))
+    jd = np.arange(0,days*24/step_hours+1)/(24/step_hours)
+    jd = np.hstack((-np.flip(jd)[:-1],jd))+jd_peri
+    r_sc = np.linalg.norm(r,axis=1)
+    v_sc_r = np.zeros(len(jd))
+    v_sc_t = np.zeros(len(jd))
+    for i in range(len(jd)):
+        unit_radial = r[i,:]/np.linalg.norm(r[i,:])
+        v_sc_r[i] = np.inner(unit_radial,v[i,:])
+        v_sc_t[i] = np.linalg.norm(v[i,:]-v_sc_r[i]*unit_radial)
+    area_front = np.ones(len(jd))*6.11
+    area_side = np.ones(len(jd))*4.62
+
+    data = pd.DataFrame(data=np.array([v_sc_r/1000,
+                                       v_sc_t/1000,
+                                       r_sc/AU,
+                                       area_front,
+                                       area_side,
+                                       jd]).transpose(),
+                        index=np.arange(len(r_sc),dtype=int),
+                        columns=["v_sc_r",
+                                 "v_sc_t",
+                                 "r_sc",
+                                 "area_front",
+                                 "area_side",
+                                 "jd"])
+    return data
+
+
 def main(data,
          ex=0.01,
+         incl=1e-5,
          gamma=-1.3,
-         loc=figures_location):
-
-    perihelia = get_approaches(psp_ephemeris_file)[:16]
+         loc=figures_location,
+         peri=0):
 
     r_vector = data["r_sc"].to_numpy()
     v_r_vector = data["v_sc_r"].to_numpy()
@@ -341,6 +393,7 @@ def main(data,
         S_front_vector = S_front_vector,
         S_side_vector = S_side_vector*0,
         ex = ex,
+        incl = incl,
         beta = 0,
         gamma = gamma,
         n = 7e-9)
@@ -351,20 +404,32 @@ def main(data,
         S_front_vector = S_front_vector*0,
         S_side_vector = S_side_vector,
         ex = ex,
+        incl = incl,
         beta = 0,
         gamma = gamma,
         n = 7e-9)
 
-    for peri in [1,4,6,8,10]:
-        peri_index = np.argmin(np.abs(jd-perihelia[peri]))
-        bounds = (peri_index-40,peri_index+40)
-        plot_perihelion(flux_front,flux_side,
-                        r_vector,v_r_vector,v_phi_vector,
-                        bounds[0],bounds[1],
-                        peri,
-                        ex,loc)
+    day_delta = np.array([jd2date(j) for j in jd]) - jd2date(np.mean(jd))
+    days = np.array([d.days + d.seconds/(24*3600) for d in day_delta])
 
-    #plot_maxima_zoom(data,perihelia,flux,e,filename=f"eccentricity_{e}")
+    flux = flux_front+flux_side
+    fig, ax = plt.subplots()
+
+    ax.plot(days,flux_front,label="Radial")
+    ax.plot(days,flux_side,label="Azimuthal")
+    ax.plot(days,flux,label="Total")
+    ax.legend(facecolor='white',framealpha=1,loc=3,fontsize="small")
+    ax.set_xlabel("Time since perihelion [d]")
+    ax.set_ylabel("Dust detection rate [/s]")
+    ax.set_ylim(bottom=0)
+    ax.set_xlim(min(days),max(days))
+    ax.set_title(f"peri: {peri}; ecc: {ex}; incl: {incl}")
+    fig.tight_layout()
+    if loc is not None:
+        plt.savefig(loc+f"peri_{peri}_ecc_{ex}_incl_{incl}"+".png",dpi=1200)
+    plt.show()
+
+
 
 
 
@@ -373,11 +438,41 @@ def main(data,
 if __name__ == "__main__":
 
     loc = os.path.join(figures_location,"eccentricity","")
-    data = load_ephem_data(os.path.join("data_synced",
-                                        "psp_ephemeris_2_noheader.txt"))
+    # data = load_ephem_data(os.path.join("data_synced",
+    #                                     "psp_sun_noheader.txt"))
     for ex in [0.001,0.1,0.2,0.3,0.4]:
-        density_scaling(ex=ex,size=500000,loc=loc)
-        #main(data=data,ex=ex,loc=loc)
+        for incl in [1e-5,10,30]:
+            #density_scaling(ex=ex,size=500000,loc=loc)
+            for (jd_peri,
+                 n_peri,
+                 r_peri,
+                 v_peri) in zip([date2jd(dt.date(2018,11, 6)),
+                               date2jd(dt.date(2020, 1,29)),
+                               date2jd(dt.date(2020, 9,27)),
+                               date2jd(dt.date(2021, 4,28)),
+                               date2jd(dt.date(2021,11,21))],
+                               [1,
+                                4,
+                                6,
+                                8,
+                                10],
+                               [2.48e10,
+                                1.94e10,
+                                1.42e10,
+                                1.11e10,
+                                9.2e9],
+                               [9.5e4,
+                                1.09e5,
+                                1.29e5,
+                                1.47e5,
+                                1.63e5]):
+                data = construct_perihel(jd_peri,
+                                         n_peri,
+                                         r_peri,
+                                         v_peri,
+                                         days=10,
+                                         step_hours=2)
+                main(data=data,ex=ex,incl=incl,loc=loc,peri=n_peri)
 
 
 

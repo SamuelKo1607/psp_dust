@@ -49,6 +49,106 @@ def azimuthal_flux(r_si,v_phi_si,
     return j_tot
 
 @jit
+def azimuthal_flux_inclination(r_si,v_phi_si,
+                               ex,incl,mu,gamma):
+    """
+    The azimuthal component of the bound dust flux, 
+    assuming PSP is a cuboid.
+
+    Parameters
+    ----------
+    r : float
+        SC heliocentric distance [m].
+    v_phi : float
+        SC heliocentric azimuthal speed [m/s].
+    ex : float
+        Dust eccentricity.
+    incl : float
+        Dust inclination [deg].
+    mu : float
+        Effective gravitational parameter, 
+        acocunting for beta value.
+    gamma : float
+        Bound dust radial spatial density exponent. 
+
+    Returns
+    -------
+    j_tot : float
+        The total azimuthal flux, stupid unit, see bound_flux.
+
+    """
+    def indefinite_we(x):
+        a = (x**(gamma+2))/(gamma+2)*np.cos(np.deg2rad(incl))
+        b = v_phi_si*(x**(gamma+1))/(gamma+1)
+        return a-b
+
+    def indefinite_n(x):
+        a = (x**(gamma+2))/(gamma+2)*np.sin(np.deg2rad(incl))
+        return a
+
+    j_w = ( indefinite_we(np.max(np.array([v_phi_si/np.cos(np.deg2rad(incl)),
+                                 (mu*(1+ex)/r_si)**0.5])) )
+          - indefinite_we(np.max(np.array([v_phi_si/np.cos(np.deg2rad(incl)),
+                                 (mu*(1-ex)/r_si)**0.5])) ) )
+
+    j_e = ( indefinite_we(np.min(np.array([v_phi_si/np.cos(np.deg2rad(incl)),
+                                 (mu*(1+ex)/r_si)**0.5])) )
+          - indefinite_we(np.min(np.array([v_phi_si/np.cos(np.deg2rad(incl)),
+                                 (mu*(1-ex)/r_si)**0.5])) ) )
+
+    j_n = ( indefinite_n((mu*(1+ex)/r_si)**0.5)
+          - indefinite_n((mu*(1-ex)/r_si)**0.5) )
+
+    j_tot = j_w - j_e + j_n
+    return j_tot
+
+@jit
+def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
+                                         ex,incl,mu,gamma,
+                                         size=100000):
+    """
+    The azimuthal component of the bound dust flux, 
+    assuming PSP is a cylinder.
+
+    Parameters
+    ----------
+    r : float
+        SC heliocentric distance [m].
+    v_phi : float
+        SC heliocentric azimuthal speed [m/s].
+    ex : float
+        Dust eccentricity.
+    incl : float
+        Dust inclination [deg].
+    mu : float
+        Effective gravitational parameter, 
+        acocunting for beta value.
+    gamma : float
+        Bound dust radial spatial density exponent.
+    size : int, optional
+        The number of MC integration points.
+        The default is 100000.
+
+    Returns
+    -------
+    j_azim_cyl : float
+        The total azimuthal flux, stupid unit, see bound_flux.
+
+    """
+    lo = (mu*(1-ex)/r_si)**0.5
+    hi = (mu*(1+ex)/r_si)**0.5
+
+    V = hi - lo
+    x = np.random.uniform(lo,hi,size)
+
+    v_cyl = (  ( v_phi_si * np.sin(np.deg2rad(incl)) )**2
+             + ( x - v_phi_si * np.cos(np.deg2rad(incl)) )**2 )**0.5
+
+    j_azim_cyl = V * np.average(v_cyl * (x)**gamma)
+
+    return j_azim_cyl
+
+@jit
 def radial_flux(r_si,v_r_si,
                 ex,mu,gamma,
                 size=100000):
@@ -109,6 +209,7 @@ def bound_flux(r,v_r,v_phi,
                S_front,
                S_side,
                ex=1e-2,
+               incl=1e-5,
                beta=0,
                gamma=-1.3,
                n=1e-8):
@@ -156,8 +257,12 @@ def bound_flux(r,v_r,v_phi,
 
 
     total_flux = C * (
-                  S_side * azimuthal_flux(r_si,v_phi_si,ex,mu,gamma)
-                + S_front * radial_flux(r_si,v_r_si,ex,mu,gamma) )
+                  S_side * azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
+                                                                ex,incl,
+                                                                mu,gamma)
+                + S_front * radial_flux(r_si,v_r_si,
+                                        ex,
+                                        mu,gamma) )
 
     return total_flux
 
@@ -166,6 +271,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                           S_front_vector,
                           S_side_vector,
                           ex=1e-2,
+                          incl=1e-5,
                           beta=0,
                           gamma=-1.3,
                           n=1):
@@ -214,7 +320,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                                            v_phi,
                                            S_front,
                                            S_side,
-                                           ex,beta,gamma,n))
+                                           ex,incl,beta,gamma,n))
     return flux_vector
 
 
@@ -284,6 +390,107 @@ def r_smearing(r_peri,
         if goodness > np.random.random():
             r = r_proposal
     return sampled[burnin:]
+
+@jit
+def acceleration(r):
+    """
+    The Sun is assumed in [0,0,0], stationary. 
+
+    Parameters
+    ----------
+    r : np.array, 1D of length 3
+        postion [m]
+
+    Returns
+    -------
+    a : np.array, 1D of length 3
+        acceleration [m/s**2]
+
+    """
+    unit_r = r/np.sqrt(np.sum(r**2))
+    a = -unit_r * GM/np.sum(r**2)
+    return a
+
+@jit
+def verlet_step(r,
+                v,
+                a,
+                dt):
+    """
+    One inegration step, speed Verlet alg.
+
+    Parameters
+    ----------
+    r : np.array, 1D of length 3
+        postion [m]
+    v : np.array, 1D of length 3
+        velocity [m/s]
+    a : np.array, 1D of length 3
+        acceleration [m/s**2]
+    dt : float
+        time step [s]
+
+    Returns
+    -------
+    r_new : np.array, 1D of length 3
+        new postion [m]
+    v_new : np.array, 1D of length 3
+        new velocity [m/s]
+    a_new : np.array, 1D of length 3
+        new acceleration [m/s**2]
+
+    """
+    r_new = r + v*dt + 0.5*a*dt**2
+    a_new = acceleration(r_new)
+    v_new = v + 0.5*(a + a_new)*dt
+    return r_new, v_new, a_new
+
+
+def velocity_verlet(r_peri=2.48e10,
+                    v_peri=9.5e4,
+                    days=140,
+                    step_hours=1):
+    """
+    A simple implementation of velocity Verlet alg. The sun is assumed 
+    in [0,0,0] point, the perihelion aligned with the x-axis.
+
+    Parameters
+    ----------
+    r_peri : float, optional
+        The perihelion distance, [m]. The default is 2.48e10.
+    v_peri : float, optional
+        The perihelion speed, [m/s]. The default is 9.5e4.
+    days : float, optional
+        The number of days after the perihelion. The default is 140.
+    step_hours : float, optional
+        The time step [h]. The default is 1.
+
+    Returns
+    -------
+    r : np.array of float, shape (n,3)
+        The calculated position vectors.
+    v : np.array of float, shape (n,3)
+        The calculated positions.
+
+    """
+    r = np.zeros(shape=(0,3))
+    v = np.zeros(shape=(0,3))
+    r = np.vstack((r,np.array([r_peri,0,0])))
+    v = np.vstack((v,np.array([0,v_peri,0])))
+    a = acceleration(r[-1,:])
+    for i in range(int(days*24/step_hours)):
+        r_new, v_new, a = verlet_step(r[-1,:],v[-1,:],a,step_hours*3600)
+        r = np.vstack((r,r_new))
+        v = np.vstack((v,v_new))
+    return r,v
+
+
+
+
+
+
+
+
 
 
 """
