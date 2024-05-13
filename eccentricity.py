@@ -373,9 +373,11 @@ def construct_perihel(jd_peri,
 
 
 def main(data,
-         ex=0.01,
+         ex=1e-5,
          incl=1e-5,
+         retro=1e-10,
          gamma=-1.3,
+         beta=0,
          loc=figures_location,
          peri=0):
 
@@ -394,7 +396,8 @@ def main(data,
         S_side_vector = S_side_vector*0,
         ex = ex,
         incl = incl,
-        beta = 0,
+        retro = retro,
+        beta = beta,
         gamma = gamma,
         n = 7e-9)
     flux_side = bound_flux_vectorized(
@@ -405,7 +408,8 @@ def main(data,
         S_side_vector = S_side_vector,
         ex = ex,
         incl = incl,
-        beta = 0,
+        retro = retro,
+        beta = beta,
         gamma = gamma,
         n = 7e-9)
 
@@ -423,10 +427,13 @@ def main(data,
     ax.set_ylabel("Dust detection rate [/s]")
     ax.set_ylim(bottom=0)
     ax.set_xlim(min(days),max(days))
-    ax.set_title(f"peri: {peri}; ecc: {ex}; incl: {incl}")
+    ax.set_title(f"peri: {peri};\necc={ex}; incl={incl}; "
+                 +f"retro={retro}; beta={beta}")
     fig.tight_layout()
     if loc is not None:
-        plt.savefig(loc+f"peri_{peri}_ecc_{ex}_incl_{incl}"+".png",dpi=1200)
+        plt.savefig(loc+f"peri_{peri}_ecc_{ex}_incl_{incl}"
+                    +f"_retro_{retro}_beta_{beta}"
+                    +".png",dpi=1200)
     plt.show()
 
 
@@ -437,42 +444,47 @@ def main(data,
 #%%
 if __name__ == "__main__":
 
-    loc = os.path.join(figures_location,"eccentricity","")
-    # data = load_ephem_data(os.path.join("data_synced",
-    #                                     "psp_sun_noheader.txt"))
-    for ex in [0.001,0.1,0.2,0.3,0.4]:
-        for incl in [1e-5,10,30]:
-            #density_scaling(ex=ex,size=500000,loc=loc)
-            for (jd_peri,
-                 n_peri,
-                 r_peri,
-                 v_peri) in zip([date2jd(dt.date(2018,11, 6)),
-                               date2jd(dt.date(2020, 1,29)),
-                               date2jd(dt.date(2020, 9,27)),
-                               date2jd(dt.date(2021, 4,28)),
-                               date2jd(dt.date(2021,11,21))],
-                               [1,
-                                4,
-                                6,
-                                8,
-                                10],
-                               [2.48e10,
-                                1.94e10,
-                                1.42e10,
-                                1.11e10,
-                                9.2e9],
-                               [9.5e4,
-                                1.09e5,
-                                1.29e5,
-                                1.47e5,
-                                1.63e5]):
-                data = construct_perihel(jd_peri,
-                                         n_peri,
-                                         r_peri,
-                                         v_peri,
-                                         days=10,
-                                         step_hours=2)
-                main(data=data,ex=ex,incl=incl,loc=loc,peri=n_peri)
+    loc = os.path.join(figures_location,"retro","")
+    for ex in [0.2]:
+        for incl in [20]:
+            for retro in [1e-10,0.01,0.05]:
+                for beta in [0.1]:
+                    #density_scaling(ex=ex,size=500000,loc=loc)
+                    for (jd_peri,
+                         n_peri,
+                         r_peri,
+                         v_peri) in zip([date2jd(dt.date(2018,11, 6)),
+                                       date2jd(dt.date(2020, 1,29)),
+                                       date2jd(dt.date(2020, 9,27)),
+                                       date2jd(dt.date(2021, 4,28)),
+                                       date2jd(dt.date(2021,11,21))],
+                                       [1,
+                                        4,
+                                        6,
+                                        8,
+                                        10],
+                                       [2.48e10,
+                                        1.94e10,
+                                        1.42e10,
+                                        1.11e10,
+                                        9.2e9],
+                                       [9.5e4,
+                                        1.09e5,
+                                        1.29e5,
+                                        1.47e5,
+                                        1.63e5]):
+                        data = construct_perihel(jd_peri,
+                                                 n_peri,
+                                                 r_peri,
+                                                 v_peri,
+                                                 days=10,
+                                                 step_hours=2)
+                        main(data=data,
+                             ex=ex,
+                             incl=incl,
+                             retro=retro,
+                             beta=beta,
+                             loc=loc,peri=n_peri)
 
 
 

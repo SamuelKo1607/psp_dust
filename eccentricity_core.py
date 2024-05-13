@@ -4,6 +4,8 @@ from numba import jit
 from conversions import GM
 from conversions import AU
 
+Size=100000
+
 @jit
 def azimuthal_flux(r_si,v_phi_si,
                    ex,mu,gamma):
@@ -104,8 +106,9 @@ def azimuthal_flux_inclination(r_si,v_phi_si,
 
 @jit
 def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
-                                         ex,incl,mu,gamma,
-                                         size=100000):
+                                         ex,incl,retro,
+                                         mu,gamma,
+                                         size=Size):
     """
     The azimuthal component of the bound dust flux, 
     assuming PSP is a cylinder.
@@ -120,6 +123,8 @@ def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
         Dust eccentricity.
     incl : float
         Dust inclination [deg].
+    retro : float
+        Retrograde fraction (0-1).
     mu : float
         Effective gravitational parameter, 
         acocunting for beta value.
@@ -140,18 +145,19 @@ def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
 
     V = hi - lo
     x = np.random.uniform(lo,hi,size)
+    x *= (-1)**(np.random.random(size)<retro)
 
-    v_cyl = (  ( v_phi_si * np.sin(np.deg2rad(incl)) )**2
+    v_cyl = (  (     v_phi_si * np.sin(np.deg2rad(incl)) )**2
              + ( x - v_phi_si * np.cos(np.deg2rad(incl)) )**2 )**0.5
 
-    j_azim_cyl = V * np.average(v_cyl * (x)**gamma)
+    j_azim_cyl = V * np.average(v_cyl * (np.abs(x))**gamma)
 
     return j_azim_cyl
 
 @jit
 def radial_flux(r_si,v_r_si,
                 ex,mu,gamma,
-                size=100000):
+                size=Size):
     """
     The radial component of the bound dust flux.
 
@@ -208,8 +214,9 @@ def radial_flux(r_si,v_r_si,
 def bound_flux(r,v_r,v_phi,
                S_front,
                S_side,
-               ex=1e-2,
+               ex=1e-5,
                incl=1e-5,
+               retro=1e-10,
                beta=0,
                gamma=-1.3,
                n=1e-8):
@@ -230,7 +237,11 @@ def bound_flux(r,v_r,v_phi,
     S_side : float
         SC lateral cross section [m^2].
     ex : float, optional
-        Dust eccentricity. The default is 0.
+        Dust eccentricity. The default is 1e-5.
+    incl : float, optional
+        Inclination. The default is 1e-5.
+    retro : float, optional
+        Retrograde fraction (0-1). 1e-10.
     beta : float, optional
         Dust beta parameter. The default is 0.
     gamma : float, optional
@@ -258,7 +269,7 @@ def bound_flux(r,v_r,v_phi,
 
     total_flux = C * (
                   S_side * azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
-                                                                ex,incl,
+                                                                ex,incl,retro,
                                                                 mu,gamma)
                 + S_front * radial_flux(r_si,v_r_si,
                                         ex,
@@ -270,11 +281,12 @@ def bound_flux(r,v_r,v_phi,
 def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                           S_front_vector,
                           S_side_vector,
-                          ex=1e-2,
+                          ex=1e-5,
                           incl=1e-5,
+                          retro=1e-10,
                           beta=0,
                           gamma=-1.3,
-                          n=1):
+                          n=1e-8):
     """
     A vectorizer for bound_flux function.
 
@@ -292,6 +304,10 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
         SC lateral cross section [m^2].
     ex : float, optional
         Dust eccentricity. The default is 0.
+    incl : float, optional
+        Inclination. The default is 1e-5.
+    retro : float, optional
+        Retrograde fraction (0-1). 1e-10.
     beta : float, optional
         Dust beta parameter. The default is 0.
     gamma : float, optional
@@ -320,7 +336,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                                            v_phi,
                                            S_front,
                                            S_side,
-                                           ex,incl,beta,gamma,n))
+                                           ex,incl,retro,beta,gamma,n))
     return flux_vector
 
 
