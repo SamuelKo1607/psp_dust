@@ -145,7 +145,7 @@ def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
 
     V = hi - lo
     x = np.random.uniform(lo,hi,size)
-    x *= (-1)**(np.random.random(size)<retro)
+    x *= (-1)**((np.arange(size)/size)<retro)
 
     v_cyl = (  (     v_phi_si * np.sin(np.deg2rad(incl)) )**2
              + ( x - v_phi_si * np.cos(np.deg2rad(incl)) )**2 )**0.5

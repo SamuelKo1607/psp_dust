@@ -417,12 +417,15 @@ def main(data,
     days = np.array([d.days + d.seconds/(24*3600) for d in day_delta])
 
     flux = flux_front+flux_side
+    dip = 1-(flux[len(flux)//2]/max(flux))
+
     fig, ax = plt.subplots()
 
     ax.plot(days,flux_front,label="Radial")
     ax.plot(days,flux_side,label="Azimuthal")
     ax.plot(days,flux,label="Total")
     ax.legend(facecolor='white',framealpha=1,loc=3,fontsize="small")
+    ax.text(min(days)+1,0.9*max(flux),f"dip = {dip:.3}")
     ax.set_xlabel("Time since perihelion [d]")
     ax.set_ylabel("Dust detection rate [/s]")
     ax.set_ylim(bottom=0)
@@ -444,11 +447,11 @@ def main(data,
 #%%
 if __name__ == "__main__":
 
-    loc = os.path.join(figures_location,"retro","")
-    for ex in [0.2]:
-        for incl in [20]:
-            for retro in [1e-10,0.01,0.05]:
-                for beta in [0.1]:
+    loc = os.path.join(figures_location,"perihelia","retro","")
+    for ex in [1e-3]:
+        for incl in [1e-3]:
+            for retro in [1e-10,1e-2,5e-2,1e-1]:
+                for beta in [0]:
                     #density_scaling(ex=ex,size=500000,loc=loc)
                     for (jd_peri,
                          n_peri,
