@@ -4,11 +4,13 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import datetime as dt
+import functools
 from numba import jit
 from tqdm.auto import tqdm
 from scipy.interpolate import CubicSpline
 from scipy.stats import poisson
 from scipy.signal import argrelextrema
+from scipy.optimize import fmin
 
 from eccentricity_core import bound_flux_vectorized
 from eccentricity_core import r_smearing
@@ -407,11 +409,176 @@ def plot_compare(r_model,
     plt.show()
 
 
+def split_at_jumps(array,
+                   condition_array=None,
+                   step=10):
+    """
+    To split an array with missing data into a list of shorter arrays.
+
+    Parameters
+    ----------
+    array : np.array 1D
+        The array to be split. If "condition_array" is provided, this one 
+        does not have to be of type float.
+    condition_array : np.array 1D of float or None, optional
+        The array to base the split on. If None, then "array" is used. 
+        The default is None.
+    step : float, optional
+        How big a gap suffices for a cut. The default is 10.
+
+    Returns
+    -------
+    list_of_chunks : list of np.array 1D of type as "array"
+        The "array" after it was cut into shorter pieces.
+
+    """
+    if condition_array is None:
+        condition_array = array
+    jumps = np.where(np.diff(condition_array)>step)[0]
+    chunk_sizes = np.append(jumps[0]+1,np.diff(jumps))
+    list_of_chunks = []
+    for chunk_size in chunk_sizes:
+        list_of_chunks.append(array[:chunk_size])
+        array = array[chunk_size:]
+    return list_of_chunks
+
+
+def powerlaw(c,slope,x):
+    return c*(x**slope)
+
+
+def loglik_slope_f(counts,
+                   exposures,
+                   f,
+                   x):
+    """
+    Calculates the log-likelihood of a realization of n measurements 
+    in a Poisson random process.
+
+    Parameters
+    ----------
+    counts : np.array of int
+        Data.
+    exposures : np.array of float
+        Exposures.
+    f : function: 1D array -> 1D array
+        Rate function.
+    x : np.array of float
+        Rate indep. variable.
+
+    Returns
+    -------
+    loglik : float
+        log likelihood.
+
+    """
+    loglik = np.sum(poisson.logpmf(counts,exposures*f(x)))
+    return loglik
+
+
+def best_constant_counts(counts,
+                         exposures,
+                         x,
+                         slope):
+    """
+    Finds the most likely constant prefactor for the rate,
+    given the slope.
+
+    Parameters
+    ----------
+    counts : np.array of int
+        Data.
+    exposures : np.array of float
+        Exposures.
+    x : np.array of float
+        Rate indep. variable.
+    slope : float
+        The slope of the powerlaw function.
+
+    Returns
+    -------
+    max_c : float
+        The best constant prefactor.
+
+    """
+
+    max_c = fmin(lambda c: -loglik_slope_f(counts,
+                                           exposures,
+                                           functools.partial(powerlaw,
+                                                             c,slope),
+                                           x), 1, disp=0)[0]
+    return max_c
+
+
+def loglik_slope(count_chunks,
+                 duty_seconds_chunks,
+                 r_chunks,
+                 slope):
+    """
+    The loglik of the slope, given the data and given 
+    the freedom in the multiplicative index of powerlaw 
+    for each approach.
+
+    Parameters
+    ----------
+    count_chunks : list of np.array 1D
+        Chunks of the counts (a chunk per approach).
+    duty_seconds_chunks : list of np.array 1D
+        Chunks of the duty cycle (a chunk per approach).
+    r_chunks : list of np.array 1D
+        Chunks of the heliocentric distance (a chunk per approach).
+    slope : float
+        The slope of the powerlaw.
+
+    Returns
+    -------
+    loglik : float
+        The log likelihood of the slope.
+
+    """
+    constants = np.zeros(len(count_chunks))
+    for i in range(len(count_chunks)):
+        constants[i] = best_constant_counts(count_chunks[i],
+                                            duty_seconds_chunks[i],
+                                            r_chunks[i],
+                                            slope)
+    logliks = np.zeros(len(count_chunks))
+    for i in range(len(count_chunks)):
+        logliks[i] = loglik_slope_f(count_chunks[i],
+                                    duty_seconds_chunks[i],
+                                    functools.partial(powerlaw,
+                                                      constants[i],slope),
+                                    r_chunks[i])
+    loglik = np.sum(logliks)
+    return loglik, constants
+
+
 def scaling_estimate(obs,
                      rmin=0.125,
-                     rmax=0.25):
+                     rmax=0.25,
+                     guess=-1.3):
+    """
+    Estimates the spatial scaling for the density, based on post-perihelia.
+
+    Parameters
+    ----------
+    obs : list of load_data.Observation
+        All the observations we have for PSP.
+    rmin : float, optional
+        What min distance to include. The default is 0.125.
+    rmax : float, optional
+        What max distance to include. The default is 0.25.
+
+    Returns
+    -------
+    most_likely_slope : float
+        The most likely slope, given all the observations.
+    constants : np.array of float, 1D
+        The prefactors for the individual approaches.
+
+    """
     obs = [ob for ob in obs if (ob.duty_hours > 0.1
-                                and ob.inbound == 1
+                                and ob.inbound == 1 # this means outbound
                                 and ob.heliocentric_distance > rmin
                                 and ob.heliocentric_distance < rmax
                                 )]
@@ -420,10 +587,21 @@ def scaling_estimate(obs,
     jd = np.array([ob.jd_center for ob in obs])
     r = np.array([ob.heliocentric_distance for ob in obs])
 
-    # tbd break down into individual approaches
+    duty_seconds_chunks = split_at_jumps(duty_seconds,jd)
+    count_chunks = split_at_jumps(count,jd)
+    r_chunks = split_at_jumps(r,jd)
 
-    # tbd fit multiplicative constant for each approach,
-    # and just one slope for all of them, an assistant function needed
+    most_likely_slope = fmin(lambda s: -loglik_slope(count_chunks,
+                                                     duty_seconds_chunks,
+                                                     r_chunks,
+                                                     s)[0],guess,disp=0)[0]
+    constants = loglik_slope(count_chunks,
+                             duty_seconds_chunks,
+                             r_chunks,
+                             most_likely_slope)[1]
+
+    return most_likely_slope, constants
+
 
 
 
@@ -447,12 +625,26 @@ if __name__ == "__main__":
     ephem = load_ephem_data(psp_sun_ephemeris_file)
     loc = os.path.join(figures_location,"ddz_profile","")
 
+    # get what we need from the data
+    psp_obs = load_all_obs(all_obs_location)
+    psp_obs = [ob for ob in psp_obs if ob.duty_hours > 0.1]
+    jds_obs = np.array([ob.jd_center for ob in psp_obs])
+    duty_seconds_obs = np.array([ob.duty_hours for ob in psp_obs])*3600
+    flux_obs = np.array([ob.count_corrected
+                         /ob.duty_hours for ob in psp_obs])/3600
+    flux_obs_errors = np.array([get_detection_errors(ob.count_corrected)/
+                                ob.duty_hours for ob in psp_obs])/3600
+
+    # find the slope and the prefactor
+    slope, prefactors = scaling_estimate(load_all_obs(all_obs_location),
+                                         rmin=0.15,rmax=0.2)
+
     # evaluate model
-    gamma=-1.3
-    ex=0.15
-    incl=20
-    retro=0.03
-    beta=0.05
+    gamma = slope
+    ex = 1e-3
+    incl = 1e-3
+    retro = 1e-5
+    beta = 1e-5
     flux_model = bound_flux_vectorized(
         r_vector = ephem["r_sc"].to_numpy(),
         v_r_vector = ephem["v_sc_r"].to_numpy(),
@@ -471,49 +663,42 @@ if __name__ == "__main__":
     r_sc_spline = CubicSpline(jd, r_sc)
     approaches = find_approaches(jd,r_sc)
 
-    # get what we need from the data
-    psp_obs = load_all_obs(all_obs_location)
-    psp_obs = [ob for ob in psp_obs if ob.duty_hours > 0.1]
-    jds_obs = np.array([ob.jd_center for ob in psp_obs])
-    duty_seconds_obs = np.array([ob.duty_hours for ob in psp_obs])*3600
-    flux_obs = np.array([ob.count_corrected
-                         /ob.duty_hours for ob in psp_obs])/3600
-    flux_obs_errors = np.array([get_detection_errors(ob.count_corrected)/
-                                ob.duty_hours for ob in psp_obs])/3600
-
-    # find the best prefactor for the model
-    all_n = np.zeros(0)
-    all_e = np.zeros(0)
-    all_m = np.zeros(0)
-    for approach in approaches[approaches<max(jds_obs)]:
+    # show the model vs. the data
+    relative_rs = []
+    relative_fs = []
+    for i,approach in enumerate(approaches[approaches<max(jds_obs)]):
         approach_end = min(jd[(jd>approach)*(r_sc>0.2)])
         flux_obs_part = flux_obs[(jds_obs>approach)
-                                 *(jds_obs<approach_end)]
+                                  *(jds_obs<approach_end)]
         duty_seconds_obs_part = duty_seconds_obs[(jds_obs>approach)
-                                                 *(jds_obs<approach_end)]
+                                                  *(jds_obs<approach_end)]
         flux_obs_errors_part = flux_obs_errors[(jds_obs>approach)
-                                               *(jds_obs<approach_end),:]
+                                                *(jds_obs<approach_end),:]
         jds_obs_part = jds_obs[(jds_obs>approach)
-                               *(jds_obs<approach_end)]
+                                *(jds_obs<approach_end)]
         r_obs_part = r_sc_spline(jds_obs_part)
         f_model_part = flux_model_spline(jds_obs_part)
         j = jd[(jd>approach)*(jd<approach_end)]
         r = r_sc[(jd>approach)*(jd<approach_end)]
         f = flux_model[(jd>approach)*(jd<approach_end)]
+        flux_model_spline_r = CubicSpline(r,f)
 
-        all_n = np.append(all_n,(flux_obs_part[r_obs_part>0.12]*
-                                 duty_seconds_obs_part[r_obs_part>0.12]))
-        all_e = np.append(all_e,duty_seconds_obs_part[r_obs_part>0.12])
-        all_m = np.append(all_m,f_model_part[r_obs_part>0.12])
+        align = r_obs_part>0.16
+        pref = ( np.mean(flux_obs_part[align])
+                /np.mean(flux_model_spline_r(r_obs_part[align])) )
+
         # compare model and the data
-        c = 0.83549
-        plot_compare(r,c*f,
+        plot_compare(r,pref*f,
                      r_obs_part,flux_obs_part,
                      flux_obs_errors_part.transpose())
-    c = most_likely_prefactor(all_n.astype(int),all_e,all_m)
-    print(c)
 
-    slope = scaling_estimate(load_all_obs(all_obs_location))
+        relative_rs.append(r_obs_part)
+        relative_fs.append(flux_obs_part
+                           /(pref*flux_model_spline_r(r_obs_part)))
+
+    for r,f in zip(relative_rs,relative_fs):
+        plt.plot(r,f)
+    plt.show()
 
 
 
