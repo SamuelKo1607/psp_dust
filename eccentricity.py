@@ -138,7 +138,7 @@ def plot_maxima_zoom(data,
 
 
 def density_scaling(gamma=-1.3,
-                    ex=0.001,
+                    ec=0.001,
                     r_min=0.04,
                     r_max=1.1,
                     size=50000,
@@ -152,7 +152,7 @@ def density_scaling(gamma=-1.3,
     ----------
     gamma : float, optional
         The slope. The default is -1.3.
-    ex : float, optional
+    ec : float, optional
         Eccentricity. The default is 0.001.
     r_min : float, optional
         min perihelion. The default is 0.04.
@@ -177,7 +177,7 @@ def density_scaling(gamma=-1.3,
     spreaded = np.zeros(0)
     all_sampled = []
     for r in tqdm(r_peri):
-        samples = r_smearing(r,ex,size=1000,burnin=200)
+        samples = r_smearing(r,ec,size=1000,burnin=200)
         all_sampled.append(samples)
     spreaded = np.reshape(all_sampled,newshape=(1000*len(r_peri)))
 
@@ -194,7 +194,7 @@ def density_scaling(gamma=-1.3,
     ax.step(bincenters, hist_mod[0]/np.mean(hist_mod[0]),
             where='mid', label="smeared")
     ax.legend(fontsize="small")
-    ax.text(0.1,1.15,rf"e = {ex}, $\gamma$ = {gamma}")
+    ax.text(0.1,1.15,rf"e = {ec}, $\gamma$ = {gamma}")
     ax.set_xlabel("Heliocentric distance [AU]")
     ax.set_ylabel(r"$\gamma$-compensated pdf [arb.u.]")
     ax.set_ylim(0.8,1.2)
@@ -202,7 +202,7 @@ def density_scaling(gamma=-1.3,
     ax.set_aspect(1.5)
     fig.tight_layout()
     if loc is not None:
-        plt.savefig(loc+f"spred_{gamma}_{ex}"+".png",dpi=1200)
+        plt.savefig(loc+f"spred_{gamma}_{ec}"+".png",dpi=1200)
     plt.show()
 
 
@@ -372,14 +372,81 @@ def construct_perihel(jd_peri,
     return data
 
 
-def main(data,
-         ex=1e-5,
-         incl=1e-5,
-         retro=1e-10,
-         gamma=-1.3,
-         beta=0,
-         loc=figures_location,
-         peri=0):
+def construct_perihel_n(n):
+    """
+    A function to construct syntetic perihel given the encounter number, 
+    based on wikipedia numbers.A wrapper for "construct_perihel".
+
+    Parameters
+    ----------
+    n : int
+        Encounter number, 1 to 16.
+
+    Raises
+    ------
+    Exception
+        If the n is bad.
+
+    Returns
+    -------
+    data : pd.dataframe
+        The same as load_ephem_data() provides (AU, km/s).
+
+    """
+    if n>16 or n<1 or type(n) is not int:
+        raise Exception("bad n, int n: 1<=n<=16 needed")
+    for (jd_peri,
+         n_peri,
+         r_peri,
+         v_peri) in zip([date2jd(dt.date(2018,11, 6)),
+                         date2jd(dt.date(2019, 4, 4)),
+                         date2jd(dt.date(2019, 9, 1)),
+                         date2jd(dt.date(2020, 1,29)),
+                         date2jd(dt.date(2020, 6, 7)),
+                         date2jd(dt.date(2020, 9,27)),
+                         date2jd(dt.date(2021, 1,17)),
+                         date2jd(dt.date(2021, 4,28)),
+                         date2jd(dt.date(2021, 8, 9)),
+                         date2jd(dt.date(2021,11,21)),
+                         date2jd(dt.date(2022, 2,25)),
+                         date2jd(dt.date(2022, 6, 1)),
+                         date2jd(dt.date(2022, 9, 6)),
+                         date2jd(dt.date(2022,12,11)),
+                         date2jd(dt.date(2023, 3,17)),
+                         date2jd(dt.date(2023, 6,22))],
+                       [1,2,3,
+                        4,5,
+                        6,7,
+                        8,9,
+                        10,11,12,13,14,15,16],
+                       [2.48e10,2.48e10,2.48e10,
+                        1.94e10,1.94e10,
+                        1.42e10,1.42e10,
+                        1.11e10,1.11e10,
+                        9.2e9,9.2e9,9.2e9,9.2e9,9.2e9,9.2e9,9.2e9],
+                       [9.5e4,9.5e4,9.5e4,
+                        1.09e5,1.09e5,
+                        1.29e5,1.29e5,
+                        1.47e5,1.47e5,
+                        1.63e5,1.63e5,1.63e5,1.63e5,1.63e5,1.63e5,1.63e5]):
+        if n_peri == n:
+            data = construct_perihel(jd_peri,
+                                     n_peri,
+                                     r_peri,
+                                     v_peri,
+                                     days=10,
+                                     step_hours=2)
+    return data
+
+
+def plot_single(data,
+                ec=1e-3,
+                incl=1e-3,
+                retro=1e-5,
+                beta=0,
+                gamma=-1.3,
+                loc=figures_location,
+                peri=0):
 
     r_vector = data["r_sc"].to_numpy()
     v_r_vector = data["v_sc_r"].to_numpy()
@@ -394,7 +461,7 @@ def main(data,
         v_phi_vector = v_phi_vector,
         S_front_vector = S_front_vector,
         S_side_vector = S_side_vector*0,
-        ex = ex,
+        ex = ec,
         incl = incl,
         retro = retro,
         beta = beta,
@@ -406,7 +473,7 @@ def main(data,
         v_phi_vector = v_phi_vector,
         S_front_vector = S_front_vector*0,
         S_side_vector = S_side_vector,
-        ex = ex,
+        ex = ec,
         incl = incl,
         retro = retro,
         beta = beta,
@@ -430,64 +497,133 @@ def main(data,
     ax.set_ylabel("Dust detection rate [/s]")
     ax.set_ylim(bottom=0)
     ax.set_xlim(min(days),max(days))
-    ax.set_title(f"peri: {peri};\necc={ex}; incl={incl}; "
+    ax.set_title(f"peri: {peri};\necc={ec}; incl={incl}; "
                  +f"retro={retro}; beta={beta}")
     fig.tight_layout()
     if loc is not None:
-        plt.savefig(loc+f"peri_{peri}_ecc_{ex}_incl_{incl}"
+        plt.savefig(loc+f"peri_{peri}_ecc_{ec}_incl_{incl}"
                     +f"_retro_{retro}_beta_{beta}"
                     +".png",dpi=1200)
     plt.show()
 
 
+def plot_compare(ec=1e-3,
+                 incl=1e-3,
+                 retro=1e-5,
+                 beta=0,
+                 gamma=-1.3,
+                 loc=figures_location,
+                 peri=4,
+                 att="ec",
+                 att_values=[1e-5,0.1,0.2,0.3,0.4]):
+    """
+    Compares profiles given by different values of dust orbital parameters.
 
+    Parameters
+    ----------
+    data : TYPE
+        DESCRIPTION.
+    ec : TYPE, optional
+        DESCRIPTION. The default is 1e-5.
+    incl : TYPE, optional
+        DESCRIPTION. The default is 1e-5.
+    retro : TYPE, optional
+        DESCRIPTION. The default is 1e-10.
+    beta : TYPE, optional
+        DESCRIPTION. The default is 0.
+    gamma : TYPE, optional
+        DESCRIPTION. The default is -1.3.
+    loc : TYPE, optional
+        DESCRIPTION. The default is figures_location.
+    peri : TYPE, optional
+        DESCRIPTION. The default is 0.
+    att : str, optional
+        DESCRIPTION. The default is "ec".
+    att_values : list of float, optional
+        The values to compare. The default is [1e-5,0.1,0.2,0.3,0.4].
+
+    Returns
+    -------
+    None.
+
+    """
+
+    data = construct_perihel_n(peri)
+
+    r_vector = data["r_sc"].to_numpy()
+    v_r_vector = data["v_sc_r"].to_numpy()
+    v_phi_vector = (data["v_sc_t"].to_numpy())
+    S_front_vector = data["area_front"].to_numpy()
+    S_side_vector = data["area_side"].to_numpy()
+    jd = data["jd"].to_numpy()
+
+    day_delta = np.array([jd2date(j) for j in jd]) - jd2date(np.mean(jd))
+    days = np.array([d.days + d.seconds/(24*3600) for d in day_delta])
+
+    fig, ax = plt.subplots()
+    for i,value in enumerate(att_values):
+        if att == "ec":
+            ec = value
+        elif att == "incl":
+            incl = value
+        elif att == "retro":
+            retro = value
+        elif att == "beta":
+            beta = value
+        elif att == "gamma":
+            gamma = value
+        else:
+            raise Exception(
+                'bad att, allowed: ["ec","inlc","retro","beta","gamma"]')
+        flux = bound_flux_vectorized(
+            r_vector = r_vector,
+            v_r_vector = v_r_vector,
+            v_phi_vector = v_phi_vector,
+            S_front_vector = S_front_vector,
+            S_side_vector = S_side_vector,
+            ex = ec,
+            incl = incl,
+            retro = retro,
+            beta = beta,
+            gamma = gamma,
+            n = 7e-9)
+        ax.plot(days,flux,label=att+f"={value}")
+        dip = 1-(flux[len(flux)//2]/max(flux))
+        ax.text(min(days)+1,(0.9-0.08*i)*0.03,
+                f"dip = {dip:.3}",color="C"+str(i))
+    ax.set_xlabel("Time since perihelion [d]")
+    ax.set_ylabel("Dust detection rate [/s]")
+    ax.set_ylim(bottom=0,top=0.03)
+    ax.set_xlim(min(days),max(days))
+    ax.legend(facecolor='white',framealpha=0,loc=1,fontsize="small")
+    if loc is not None:
+        plt.savefig(loc+f"peri_{peri}_att_"+att+".png",dpi=1200)
+    plt.show()
 
 
 
 #%%
 if __name__ == "__main__":
 
-    loc = os.path.join(figures_location,"perihelia","retro","")
-    for ex in [1e-3]:
-        for incl in [1e-3]:
-            for retro in [1e-10,1e-2,5e-2,1e-1]:
+    loc = os.path.join(figures_location,"perihelia","eccentricity","")
+    for ec in [1e-3]:
+        for incl in [1e-5]:
+            for retro in [1e-10]:
                 for beta in [0]:
                     #density_scaling(ex=ex,size=500000,loc=loc)
-                    for (jd_peri,
-                         n_peri,
-                         r_peri,
-                         v_peri) in zip([date2jd(dt.date(2018,11, 6)),
-                                       date2jd(dt.date(2020, 1,29)),
-                                       date2jd(dt.date(2020, 9,27)),
-                                       date2jd(dt.date(2021, 4,28)),
-                                       date2jd(dt.date(2021,11,21))],
-                                       [1,
-                                        4,
-                                        6,
-                                        8,
-                                        10],
-                                       [2.48e10,
-                                        1.94e10,
-                                        1.42e10,
-                                        1.11e10,
-                                        9.2e9],
-                                       [9.5e4,
-                                        1.09e5,
-                                        1.29e5,
-                                        1.47e5,
-                                        1.63e5]):
-                        data = construct_perihel(jd_peri,
-                                                 n_peri,
-                                                 r_peri,
-                                                 v_peri,
-                                                 days=10,
-                                                 step_hours=2)
-                        main(data=data,
-                             ex=ex,
-                             incl=incl,
-                             retro=retro,
-                             beta=beta,
-                             loc=loc,peri=n_peri)
+                    for n_peri in [1,4,6,8,10]:
+                        plot_single(data=construct_perihel_n(n_peri),
+                                    ec=ec,
+                                    incl=incl,
+                                    retro=retro,
+                                    beta=beta,
+                                    loc=loc,
+                                    peri=n_peri)
 
+    loc = os.path.join(figures_location,"perihelia","comparison","")
+    plot_compare(att="ec",att_values=[1e-5,0.1,0.2,0.3,0.4],loc=loc)
+    plot_compare(att="incl",att_values=[1e-5,10,20,30],loc=loc)
+    plot_compare(att="retro",att_values=[1e-5,0.03,0.1],loc=loc)
+    plot_compare(att="beta",att_values=[0,0.1,0.3],loc=loc)
 
 
