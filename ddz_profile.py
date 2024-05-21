@@ -375,7 +375,9 @@ def plot_compare(r_model,
                  f_model,
                  r_obs,
                  f_obs,
-                 errors_obs):
+                 errors_obs,
+                 loc,
+                 filename=None):
     """
     A simple plot of the data and the model at once.
 
@@ -406,6 +408,8 @@ def plot_compare(r_model,
     ax.set_ylim(0,0.1)
     ax.set_xlabel("Heliocentric distance [AU]")
     ax.set_ylabel("Dust flux [/s]")
+    if filename is not None:
+        fig.savefig(loc+filename+".png",dpi=1200)
     plt.show()
 
 
@@ -603,30 +607,11 @@ def scaling_estimate(obs,
     return most_likely_slope, constants
 
 
-
-
-
-
-
-
-
-def main():
-
-    pass
-
-
-
-
-
-
-#%%
-if __name__ == "__main__":
-
-    ephem = load_ephem_data(psp_sun_ephemeris_file)
-    loc = os.path.join(figures_location,"ddz_profile","")
-
+def main(ephem,
+         fig_loc,
+         psp_obs,
+         velocity_exponent=1):
     # get what we need from the data
-    psp_obs = load_all_obs(all_obs_location)
     psp_obs = [ob for ob in psp_obs if ob.duty_hours > 0.1]
     jds_obs = np.array([ob.jd_center for ob in psp_obs])
     duty_seconds_obs = np.array([ob.duty_hours for ob in psp_obs])*3600
@@ -656,6 +641,7 @@ if __name__ == "__main__":
         retro = retro,
         beta = beta,
         gamma = gamma,
+        velocity_exponent = velocity_exponent,
         n = 7e-9)
     jd = ephem["jd"].to_numpy()
     r_sc = ephem["r_sc"].to_numpy()
@@ -690,15 +676,34 @@ if __name__ == "__main__":
         # compare model and the data
         plot_compare(r,pref*f,
                      r_obs_part,flux_obs_part,
-                     flux_obs_errors_part.transpose())
+                     flux_obs_errors_part.transpose(),
+                     loc=fig_loc,
+                     filename="comparison_approach_"+str(i))
 
         relative_rs.append(r_obs_part)
         relative_fs.append(flux_obs_part
                            /(pref*flux_model_spline_r(r_obs_part)))
 
     for r,f in zip(relative_rs,relative_fs):
-        plt.plot(r,f)
+        plt.semilogy(r,f)
+    plt.xlabel("Heliocentric distance [AU]")
+    plt.ylabel("Relative flux [1]")
     plt.show()
+
+
+
+
+#%%
+if __name__ == "__main__":
+
+    ephem = load_ephem_data(psp_sun_ephemeris_file)
+    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
+    psp_obs = load_all_obs(all_obs_location)
+
+    main(ephem,
+         loc,
+         psp_obs,
+         velocity_exponent=1)
 
 
 

@@ -108,6 +108,7 @@ def azimuthal_flux_inclination(r_si,v_phi_si,
 def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
                                          ex,incl,retro,
                                          mu,gamma,
+                                         velocity_exponent=1,
                                          size=Size):
     """
     The azimuthal component of the bound dust flux, 
@@ -130,6 +131,10 @@ def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
         acocunting for beta value.
     gamma : float
         Bound dust radial spatial density exponent.
+    velocity_exponent : float, optional
+        The exponent on the relative speed between dust and SC. 
+        If 1, then velocity does not play a role, and only detection metters. 
+        The default is 1. Szalay et al 2021 used 4.15.
     size : int, optional
         The number of MC integration points.
         The default is 100000.
@@ -150,13 +155,15 @@ def azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
     v_cyl = (  (     v_phi_si * np.sin(np.deg2rad(incl)) )**2
              + ( x - v_phi_si * np.cos(np.deg2rad(incl)) )**2 )**0.5
 
-    j_azim_cyl = V * np.average(v_cyl * (np.abs(x))**gamma)
+    j_azim_cyl = V * np.average((v_cyl**velocity_exponent)
+                                * (np.abs(x))**gamma)
 
     return j_azim_cyl
 
 @jit
 def radial_flux(r_si,v_r_si,
                 ex,mu,gamma,
+                velocity_exponent=1,
                 size=Size):
     """
     The radial component of the bound dust flux.
@@ -174,6 +181,10 @@ def radial_flux(r_si,v_r_si,
         acocunting for beta value.
     gamma : float
         Bound dust radial spatial density exponent. 
+    velocity_exponent : float, optional
+        The exponent on the relative speed between dust and SC. 
+        If 1, then velocity does not play a role, and only detection metters. 
+        The default is 1. Szalay et al 2021 used 4.15.
     size : int, optional
         The number of MC integration points.
         The default is 100000.
@@ -188,26 +199,29 @@ def radial_flux(r_si,v_r_si,
     hi = (mu*(1+ex)/r_si)**0.5
 
     V = hi - lo
-    x = np.random.uniform(lo,hi,size)
+    x = np.random.uniform(lo,hi,size) # v_dust
     good_chunk = ( ((ex**2-1)*mu**2)
                    +(2*mu*(x**2)*r_si)
                    -((x**4)*(r_si**2))
                   )**0.5/(x*r_si)
 
     j_plus_pre = V * np.average(
-         +1*(x**(gamma))*( - good_chunk - v_r_si )
+         (x**(gamma))*((np.abs( - good_chunk - v_r_si ))**velocity_exponent)
          * ( ( - good_chunk - v_r_si)>0 ) )
     j_plus_post = V * np.average(
-         +1*(x**(gamma))*( + good_chunk - v_r_si )
+         (x**(gamma))*((np.abs( + good_chunk - v_r_si ))**velocity_exponent)
          * ( ( + good_chunk - v_r_si)>0 ) )
     j_minus_pre = V * np.average(
-         -1*(x**(gamma))*( - good_chunk - v_r_si )
+         (x**(gamma))*((np.abs( + good_chunk + v_r_si ))**velocity_exponent)
          * ( ( + good_chunk + v_r_si)>0 ) )
     j_minus_post = V * np.average(
-         -1*(x**(gamma))*( + good_chunk - v_r_si )
+         (x**(gamma))*((np.abs( - good_chunk + v_r_si ))**velocity_exponent)
          * ( ( - good_chunk + v_r_si)>0 ) )
 
-    j_tot = 0.5 * (j_plus_pre + j_plus_post + j_minus_pre + j_minus_post)
+    j_tot = 0.5 * (j_plus_pre
+                   + j_plus_post
+                   + j_minus_pre
+                   + j_minus_post)
     return j_tot
 
 @jit
@@ -219,6 +233,7 @@ def bound_flux(r,v_r,v_phi,
                retro=1e-10,
                beta=0,
                gamma=-1.3,
+               velocity_exponent=1,
                n=1e-8):
     """
     The wrapper for the total bound flux observed, 
@@ -247,6 +262,10 @@ def bound_flux(r,v_r,v_phi,
     gamma : float, optional
         Bound dust radial spatial density exponent. 
         The default is -1.3.
+    velocity_exponent : float, optional
+        The exponent on the relative speed between dust and SC. 
+        If 1, then velocity does not play a role, and only detection metters. 
+        The default is 1. Szalay et al 2021 used 4.15.
     n : float, optional
         Dust number density [m^-3] at 1AU. 
         The default is 1e-8.
@@ -266,14 +285,19 @@ def bound_flux(r,v_r,v_phi,
     C = n * ((r_si/AU)**gamma) * ((AU/mu)**((gamma+1)/2)) * ((gamma+1)/
             ((1+ex)**((gamma+1)/2) - (1-ex)**((gamma+1)/2)))
 
+    normalize = (50000**(velocity_exponent-1))**(-1)
 
-    total_flux = C * (
-                  S_side * azimuthal_flux_inclination_cyllinder(r_si,v_phi_si,
-                                                                ex,incl,retro,
-                                                                mu,gamma)
-                + S_front * radial_flux(r_si,v_r_si,
-                                        ex,
-                                        mu,gamma) )
+    total_flux = C * normalize * (
+                  S_side * azimuthal_flux_inclination_cyllinder(
+                      r_si,v_phi_si,
+                      ex,incl,retro,
+                      mu,gamma,
+                      velocity_exponent=velocity_exponent)
+                + S_front * radial_flux(
+                    r_si,v_r_si,
+                    ex,
+                    mu,gamma,
+                    velocity_exponent=velocity_exponent) )
 
     return total_flux
 
@@ -286,6 +310,7 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                           retro=1e-10,
                           beta=0,
                           gamma=-1.3,
+                          velocity_exponent=1,
                           n=1e-8):
     """
     A vectorizer for bound_flux function.
@@ -313,6 +338,10 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
     gamma : float, optional
         Bound dust radial spatial density exponent. 
         The default is -1.3.
+    velocity_exponent : float, optional
+        The exponent on the relative speed between dust and SC. 
+        If 1, then velocity does not play a role, and only detection metters. 
+        The default is 1. Szalay et al 2021 used 4.15.
     n : float, optional
         Dust number density [m^-3] at 1AU. 
         The default is 1e-8.
@@ -336,7 +365,8 @@ def bound_flux_vectorized(r_vector,v_r_vector,v_phi_vector,
                                            v_phi,
                                            S_front,
                                            S_side,
-                                           ex,incl,retro,beta,gamma,n))
+                                           ex,incl,retro,beta,gamma,
+                                           float(velocity_exponent),n))
     return flux_vector
 
 
