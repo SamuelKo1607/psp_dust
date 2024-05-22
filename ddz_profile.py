@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import datetime as dt
 import functools
 from numba import jit
@@ -684,6 +685,47 @@ def estimate_powerlaws_individually(obs,
     plt.show()
 
 
+def estimate_powerlaws_all(obs,
+                           compensation=-1.3,
+                           max_r=0.5,
+                           encounter=None,
+                           maxima_indices=[5,4,4,7,9,2,5,4,
+                                           4,4,4,4,4,4,4,6]):
+
+    obs = [ob for ob in obs if (ob.duty_hours > 0.1
+                                and ob.inbound == 1 # this means outbound
+                                and ob.heliocentric_distance < max_r
+                                )]
+
+    if encounter is not None:
+        obs = [ob for ob in obs if (ob.encounter == encounter)]
+
+    jds_obs = np.array([ob.jd_center for ob in obs])
+    r = np.array([ob.heliocentric_distance for ob in obs])
+    flux_obs = np.array([ob.count_corrected
+                         /ob.duty_hours for ob in obs])/3600
+
+    norm = mpl.colors.Normalize(vmin=min(jds_obs), vmax=max(jds_obs))
+    cmap = cm.plasma
+    m = cm.ScalarMappable(norm=norm, cmap=cmap)
+
+    plt.scatter(r,flux_obs,c=m.to_rgba(jds_obs))
+    plt.xscale('log',base=10)
+    plt.yscale('log',base=10)
+    plt.suptitle("All the fluxes")
+    plt.xlabel("R [AU]")
+    plt.ylabel("Flux [/s]")
+    plt.show()
+
+    plt.scatter(r,flux_obs/(r**compensation),
+                c=m.to_rgba(jds_obs))
+    plt.xscale('log',base=10)
+    plt.yscale('log',base=10)
+    plt.suptitle("All the fluxes - compensated")
+    plt.xlabel("R [AU]")
+    plt.ylabel("Flux [arb.u.]")
+    plt.show()
+
 
 def main(ephem,
          fig_loc,
@@ -791,7 +833,10 @@ if __name__ == "__main__":
     loc = os.path.join(figures_location,"perihelia","ddz_profile","")
     psp_obs = load_all_obs(all_obs_location)
 
+
     estimate_powerlaws_individually(psp_obs)
+
+    estimate_powerlaws_all(psp_obs,compensation=-2.5)
 
     main(ephem,
          loc,
