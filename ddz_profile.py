@@ -438,13 +438,17 @@ def split_at_jumps(array,
     """
     if condition_array is None:
         condition_array = array
-    jumps = np.where(np.diff(condition_array)>step)[0]
-    chunk_sizes = np.append(jumps[0]+1,np.diff(jumps))
-    list_of_chunks = []
-    for chunk_size in chunk_sizes:
-        list_of_chunks.append(array[:chunk_size])
-        array = array[chunk_size:]
-    return list_of_chunks
+    if max(np.diff(condition_array))<=step:
+        list_of_chunks = [array]
+        return list_of_chunks
+    else:
+        jumps = np.where(np.diff(condition_array)>step)[0]
+        chunk_sizes = np.append(jumps[0]+1,np.diff(jumps))
+        list_of_chunks = []
+        for chunk_size in chunk_sizes:
+            list_of_chunks.append(array[:chunk_size])
+            array = array[chunk_size:]
+        return list_of_chunks
 
 
 def powerlaw(c,slope,x):
@@ -583,8 +587,8 @@ def scaling_estimate(obs,
     """
     obs = [ob for ob in obs if (ob.duty_hours > 0.1
                                 and ob.inbound == 1 # this means outbound
-                                and ob.heliocentric_distance > rmin
-                                and ob.heliocentric_distance < rmax
+                                and ob.heliocentric_distance >= rmin
+                                and ob.heliocentric_distance <= rmax
                                 )]
     duty_seconds = np.array([ob.duty_hours for ob in obs])*3600
     count = np.array([ob.count_corrected for ob in obs])
@@ -607,10 +611,86 @@ def scaling_estimate(obs,
     return most_likely_slope, constants
 
 
+def estimate_powerlaws_individually(obs,
+                                    guess=-1.3,
+                                    max_r=0.25,
+                                    max_encounter=16,
+                                    maxima_indices = [5,4,4,7,9,2,5,4,
+                                                      4,4,4,4,4,4,4,6],
+                                    inspect=True):
+    """
+    Estiamtes the power-law slope of the flux 
+    as a function of heliocentric distance
+    for each encounter individually. 
+
+    Parameters
+    ----------
+    obs : list of load_data.Observation
+        All the observations we have for PSP.
+    guess : float, optional
+        The initial guess. The default is -1.3.
+    max_r : float, optional
+        Upper limit in R where the fight is done. The default is 0.25.
+    max_encounter : int, optional
+        How many encounters to include. The default is 16.
+    maxima_indices : list of int, optional
+        A manually defined indices at which to start the fit 
+        for individual approaches. 
+        The default is [5,4,4,7,9,2,5,4,4,4,4,4,4,4,4,6].                                                   4,4,4,4,4,4,4,6].
+    inspect : bool, optional
+        Whether to show the individual plots. The default is True.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    obs = [ob for ob in obs if (ob.duty_hours > 0.1
+                                and ob.inbound == 1 # this means outbound
+                                and ob.heliocentric_distance < max_r)]
+
+    partial_obs = [[ob for ob in obs if (ob.encounter == e+1)]
+                   for e in range(max_encounter)]
+
+    slope_estimates = []
+    encounters = []
+    for i,obs in enumerate(partial_obs):
+        maximum_index = maxima_indices[i]
+        min_r = obs[maximum_index].heliocentric_distance
+
+        duty_seconds = np.array([ob.duty_hours for ob in obs])*3600
+        count = np.array([ob.count_corrected for ob in obs])
+        jd = np.array([ob.jd_center for ob in obs])
+        r = np.array([ob.heliocentric_distance for ob in obs])
+
+        estimate = scaling_estimate(obs,rmin=min_r)
+        slope_estimates.append(estimate[0])
+        encounters.append(obs[0].encounter)
+        if inspect:
+            plt.plot(r,count/duty_seconds)
+            plt.plot(r,powerlaw(estimate[1][0],estimate[0],r))
+            plt.annotate(str(estimate[0])[:5], xy=(0.5, 0.9),
+                         xycoords='axes fraction')
+            plt.suptitle(f"encounter {obs[0].encounter}")
+            plt.xlabel("R [AU]")
+            plt.ylabel("flux [/s]")
+            plt.show()
+
+    plt.scatter(encounters,slope_estimates,c="r")
+    plt.suptitle("slopes")
+    plt.xlabel("encounter")
+    plt.ylabel("flux slope")
+    plt.show()
+
+
+
 def main(ephem,
          fig_loc,
          psp_obs,
-         velocity_exponent=1):
+         velocity_exponent=1,
+         adaptive_align=True,
+         maxima_indices = [5,4,4,7,4,2,5,4,4,4,4,4,4,4,4,6]):
     # get what we need from the data
     psp_obs = [ob for ob in psp_obs if ob.duty_hours > 0.1]
     jds_obs = np.array([ob.jd_center for ob in psp_obs])
@@ -652,6 +732,7 @@ def main(ephem,
     # show the model vs. the data
     relative_rs = []
     relative_fs = []
+
     for i,approach in enumerate(approaches[approaches<max(jds_obs)]):
         approach_end = min(jd[(jd>approach)*(r_sc>0.2)])
         flux_obs_part = flux_obs[(jds_obs>approach)
@@ -669,7 +750,11 @@ def main(ephem,
         f = flux_model[(jd>approach)*(jd<approach_end)]
         flux_model_spline_r = CubicSpline(r,f)
 
-        align = r_obs_part>0.16
+        # TBD find the maximum and set align based on the maximum for the data
+        if adaptive_align:
+            align = r_obs_part>=r_obs_part[maxima_indices[i]]
+        else:
+            align = r_obs_part>0.16
         pref = ( np.mean(flux_obs_part[align])
                 /np.mean(flux_model_spline_r(r_obs_part[align])) )
 
@@ -690,6 +775,12 @@ def main(ephem,
     plt.ylabel("Relative flux [1]")
     plt.show()
 
+    for r,f in zip(relative_rs,relative_fs):
+        plt.plot(r,f/max(f))
+    plt.xlabel("Heliocentric distance [AU]")
+    plt.ylabel("Relative flux [1]")
+    plt.show()
+
 
 
 
@@ -700,10 +791,14 @@ if __name__ == "__main__":
     loc = os.path.join(figures_location,"perihelia","ddz_profile","")
     psp_obs = load_all_obs(all_obs_location)
 
+    estimate_powerlaws_individually(psp_obs)
+
     main(ephem,
          loc,
          psp_obs,
          velocity_exponent=1)
+
+
 
 
 
