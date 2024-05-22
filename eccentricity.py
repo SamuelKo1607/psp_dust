@@ -648,7 +648,7 @@ if __name__ == "__main__":
                      peri=peri,loc=loc,ymax=ymax)
         plot_compare(att="beta",att_values=[0,0.1,0.3,0.5],
                      peri=peri,loc=loc,ymax=ymax)
-        plot_compare(att="vexp",att_values=[1,1.1,2,4],
+        plot_compare(att="vexp",att_values=[1,1.1,2,4.15],
                      peri=peri,loc=loc,ymax=ymax)
 
 
