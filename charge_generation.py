@@ -44,12 +44,12 @@ def compare(randomness=0):
     if np.__name__=="cupy":
         ax.plot(np.asnumpy(v),np.asnumpy(detected),label="sim")
         ax.plot(np.asnumpy(v),
-                np.asnumpy(np.max(detected)*(v/np.max(v))**(M_shape*B)),
+                np.asnumpy(np.min(detected)*(v/np.min(v))**(M_shape*B)),
                 ls="dashed",label="ab={:.2f} slope ".format(M_shape*B))
     else:
         ax.plot(v,detected,label="sim")
         ax.plot(v,
-                np.max(detected)*(v/np.max(v))**(M_shape*B),
+                np.min(detected)*(v/np.min(v))**(M_shape*B),
                 ls="dashed",label="ab={:.2f} slope ".format(M_shape*B))
     ax.set_xlabel("Impact speed [km/s]")
     ax.set_ylabel("Detected [1/1]")
@@ -60,7 +60,9 @@ def compare(randomness=0):
     ax.legend()
     ax.set_xscale('log')
     ax.set_yscale('log')
-    ax.set_xlim(10,150)
+    ax.set_xlim(10,109)
+    ax.set_xticks([10, 20, 30, 40, 50, 70, 100])
+    ax.set_xticklabels([10, 20, 30, 40, 50, 70, 100])
     plt.show()
 
 
@@ -73,11 +75,11 @@ if __name__ == "__main__":
     B = 3.46
     # dust speeds to consider
     V_min = 16
-    V_max = 128
+    V_max = 96
     V_steps = 32
 
     # reasonable masses
-    M_lower = 1e-15 # r = 1 \mu m, if in kg
+    M_lower = 1e-14 # r = 1 \mu m, if in kg
     M_shape = 5/6 # or 0.9, whatever. This is the slope of CDF
     M_size = 4 *1000000
 
@@ -87,6 +89,8 @@ if __name__ == "__main__":
     # if there is randomness of a factor of 2
     compare(randomness=2)
 
+    # if there is randomness of a factor of 5
+    compare(randomness=5)
 
 
 
