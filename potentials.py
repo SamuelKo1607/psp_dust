@@ -178,6 +178,8 @@ def main(samples=100,
     print(total_tries)
     dates = [tt2000_to_date(epoch) for epoch in epochs]
 
+    body_potentials *= -1 # to get to -sum(V)
+
     r = np.linspace(min(rs),max(rs),25)
     lowers = [np.quantile(body_potentials[(r_lo<rs)*(rs<r_hi)],(1-quantile)/2)
               for r_lo,r_hi in zip(r[:-1],r[1:])]
@@ -190,14 +192,17 @@ def main(samples=100,
 
     fig, ax = plt.subplots()
     ax.set_xlabel(r"Heliocentric distance $[AU]$")
-    ax.set_ylabel(r"$V_{sc} = V1 + V2 + V3 + V4 [V]$")
+    ax.set_ylabel(r"$V_{sc} = -V1 -V2 -V3 -V4 \, [V]$")
     ax.scatter(rs,body_potentials,c="grey",s=0.5,alpha=0.2,
-               label=f"Sample (size {len(rs)})")
-    ax.plot(mid_r,means,c="red",label="Mean")
-    ax.plot(mid_r,zeros,c="black",ls="dashed")
-    ax.plot(mid_r,lowers,c="blue",label=f"{int(100*quantile)}\% quantile")
-    ax.plot(mid_r,uppers,c="blue")
-    ax.legend(fontsize="x-small")
+               label="Potential")
+    ax.plot(mid_r,means,c="k",label="Mean")
+    ax.plot([0.1,1],[0,0],c="k",ls="dashed")
+    ax.plot(mid_r,lowers,c="k",ls="dotted",
+            label=f"{int(100*quantile)}\%")
+    ax.plot(mid_r,uppers,c="k",ls="dotted")
+    ax.legend(fontsize="small",ncol=3,loc=4)
+    ax.set_xlim(0.1,0.95)
+    ax.set_ylim(-20,20)
     if filename is not None:
         fig.savefig(figures_location+filename+".png",dpi=600)
     fig.show()
