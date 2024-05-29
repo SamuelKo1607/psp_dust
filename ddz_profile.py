@@ -686,44 +686,111 @@ def estimate_powerlaws_individually(obs,
 
 
 def estimate_powerlaws_all(obs,
-                           compensation=-1.3,
+                           compensation=-2.5,
+                           dslope=0.3,
                            max_r=0.5,
                            encounter=None,
                            maxima_indices=[5,4,4,7,9,2,5,4,
-                                           4,4,4,4,4,4,4,6]):
+                                           4,4,4,4,4,4,4,6],
+                           loc=None):
+    """
+    A paper plot. A compensated plot of the outbound PSP flux between 0.15
+    and 0.5 AU. 
+
+    Parameters
+    ----------
+    obs : list of object of class Observation
+        The PSP observations.
+    compensation : float, optional
+        What to compensate by. The default is -2.5.
+    dslope : float, optional
+        The compensation +- value of this is shown in dashed lines. 
+        The default is 0.3.
+    max_r : float, optional
+        Maximum heliocentric distance. The default is 0.5.
+    encounter : int of None, optional
+        If not None, only this encounter is shown. The default is None.
+    maxima_indices : list of int, optional
+        The indices of individual post-perihelion data, 
+        where the maxima are located. Non-consequential for the paper plot.
+        The default is [5,4,4,7,9,2,5,4,4,4,4,4,4,4,4,6].                                         4,4,4,4,4,4,4,6].
+    loc : str, optional
+        Whete to save the plot. The default is None.
+
+    Returns
+    -------
+    None.
+
+    """
 
     obs = [ob for ob in obs if (ob.duty_hours > 0.1
                                 and ob.inbound == 1 # this means outbound
                                 and ob.heliocentric_distance < max_r
                                 )]
-
     if encounter is not None:
         obs = [ob for ob in obs if (ob.encounter == encounter)]
 
+    encounters = [ob.encounter for ob in obs]
+    encounter_groups = [ob.encounter_group for ob in obs]
     jds_obs = np.array([ob.jd_center for ob in obs])
-    r = np.array([ob.heliocentric_distance for ob in obs])
-    flux_obs = np.array([ob.count_corrected
-                         /ob.duty_hours for ob in obs])/3600
 
-    norm = mpl.colors.Normalize(vmin=min(jds_obs), vmax=max(jds_obs))
-    cmap = cm.plasma
+    norm = mpl.colors.Normalize(vmin=1,
+                                vmax=10)
+    cmap = cm.tab10
     m = cm.ScalarMappable(norm=norm, cmap=cmap)
-
-    plt.scatter(r,flux_obs,c=m.to_rgba(jds_obs))
-    plt.xscale('log',base=10)
+    for enc in set(encounter_groups):
+        r = np.array([ob.heliocentric_distance for ob in obs
+                      if (ob.encounter_group == enc)])
+        flux_obs = np.array([ob.count_corrected
+                             /ob.duty_hours for ob in obs
+                             if (ob.encounter_group == enc)])/3600
+        plt.scatter(r,flux_obs,c=m.to_rgba(enc),label=f"{enc}")
     plt.yscale('log',base=10)
     plt.suptitle("All the fluxes")
     plt.xlabel("R [AU]")
     plt.ylabel("Flux [/s]")
+    plt.xlim(0.15,0.5)
+    plt.legend(ncol=3)
     plt.show()
 
-    plt.scatter(r,flux_obs/(r**compensation),
-                c=m.to_rgba(jds_obs))
-    plt.xscale('log',base=10)
-    plt.yscale('log',base=10)
-    plt.suptitle("All the fluxes - compensated")
-    plt.xlabel("R [AU]")
-    plt.ylabel("Flux [arb.u.]")
+    fig,ax = plt.subplots(5,figsize=(4,4))
+    for i,enc in enumerate(set(encounter_groups)):
+        r = np.array([ob.heliocentric_distance for ob in obs
+                      if (ob.encounter_group == enc)
+                      and (ob.heliocentric_distance < 0.5)
+                      and (ob.heliocentric_distance > 0.15)])
+        flux_obs = np.array([ob.count_corrected
+                             /ob.duty_hours for ob in obs
+                             if (ob.encounter_group == enc)
+                             and (ob.heliocentric_distance < 0.5)
+                             and (ob.heliocentric_distance > 0.15)])/3600
+        ax[i].scatter(r,flux_obs/(r**compensation)*10**4,
+                    c="k",label=f"{enc}",s=2)
+        ax[i].set_xlim(0.15,0.5)
+        fit = np.poly1d(np.polyfit(r, flux_obs/(r**compensation)*10**4, 1))
+        midval = fit((min(r)+max(r))/2)
+        ax[i].plot([min(r),max(r)],[fit(min(r)),fit(max(r))],
+                   c="k")
+        for slope in [-dslope,dslope]:
+            fit = np.poly1d(np.polyfit(r, flux_obs/
+                                       (r**(compensation+slope))*10**4, 1))
+            ax[i].plot([min(r),max(r)],
+                       (np.array([fit(min(r)),fit(max(r))])
+                        /fit((min(r)+max(r))/2)*midval),
+                       c="k",ls="dashed")
+        ax[i].set_ylabel(f"Group {enc}")
+        ax[i].yaxis.set_ticks(np.array([2,4]))
+        if i!=4:
+            ax[i].xaxis.set_ticklabels([])
+    ax[0].set_title("All the fluxes, "
+                    +f"compensated by $R^{{{compensation}\pm{dslope}}}$")
+    ax[4].set_xlabel("R [AU]")
+    ax[2].set_ylabel(f"Flux [$10^{{-4}} s^{{-1}} AU^{{{-compensation}}}$] \n"+
+                     "Group 3",linespacing=2)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    if loc is not None:
+        plt.savefig(loc+f"compensated_flux.pdf",format="pdf")
     plt.show()
 
 
@@ -833,10 +900,9 @@ if __name__ == "__main__":
     loc = os.path.join(figures_location,"perihelia","ddz_profile","")
     psp_obs = load_all_obs(all_obs_location)
 
-
     estimate_powerlaws_individually(psp_obs)
 
-    estimate_powerlaws_all(psp_obs,compensation=-2.5)
+    estimate_powerlaws_all(psp_obs,compensation=-2.5,loc=loc)
 
     main(ephem,
          loc,
