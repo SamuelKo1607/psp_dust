@@ -782,8 +782,9 @@ def estimate_powerlaws_all(obs,
         ax[i].yaxis.set_ticks(np.array([2,4]))
         if i!=4:
             ax[i].xaxis.set_ticklabels([])
-    ax[0].set_title("All the fluxes, "
-                    +f"compensated by $R^{{{compensation}\pm{dslope}}}$")
+        ax[i].set_ylim(bottom=0,top=5)
+    #ax[0].set_title("All the fluxes, "
+    #                +f"compensated by $R^{{{compensation}\pm{dslope}}}$")
     ax[4].set_xlabel("R [AU]")
     ax[2].set_ylabel(f"Flux [$10^{{-4}} s^{{-1}} AU^{{{-compensation}}}$] \n"+
                      "Group 3",linespacing=2)
@@ -892,18 +893,17 @@ def main(ephem,
 
 
 
+#%%
+if __name__ == "__main__":
+    psp_obs = load_all_obs(all_obs_location)
+    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
+    estimate_powerlaws_all(psp_obs,compensation=-2.5,loc=loc)
+
 
 #%%
 if __name__ == "__main__":
-
     ephem = load_ephem_data(psp_sun_ephemeris_file)
-    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
-    psp_obs = load_all_obs(all_obs_location)
-
     estimate_powerlaws_individually(psp_obs)
-
-    estimate_powerlaws_all(psp_obs,compensation=-2.5,loc=loc)
-
     main(ephem,
          loc,
          psp_obs,

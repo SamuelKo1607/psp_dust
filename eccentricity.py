@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import datetime as dt
 from numba import jit
 from tqdm.auto import tqdm
@@ -318,7 +319,8 @@ def construct_perihel(jd_peri,
                       r_peri,
                       v_peri,
                       days=14,
-                      step_hours=1):
+                      step_hours=1,
+                      outbound_only=False):
     """
     Cosntructs an artificial part of an orbit.
 
@@ -369,10 +371,14 @@ def construct_perihel(jd_peri,
                                  "area_front",
                                  "area_side",
                                  "jd"])
+
+    if outbound_only:
+        data = data.loc[data['jd'] >= jd_peri]
+
     return data
 
 
-def construct_perihel_n(n):
+def construct_perihel_n(n,days=10,step_hours=2,outbound_only=False):
     """
     A function to construct syntetic perihel given the encounter number, 
     based on wikipedia numbers.A wrapper for "construct_perihel".
@@ -381,6 +387,8 @@ def construct_perihel_n(n):
     ----------
     n : int
         Encounter number, 1 to 16.
+    days : int, optional
+        How many days after the perihel do we want. The default is 10.
 
     Raises
     ------
@@ -434,8 +442,9 @@ def construct_perihel_n(n):
                                      n_peri,
                                      r_peri,
                                      v_peri,
-                                     days=10,
-                                     step_hours=2)
+                                     days=days,
+                                     step_hours=step_hours,
+                                     outbound_only=outbound_only)
     return data
 
 
@@ -507,6 +516,94 @@ def plot_single(data,
         plt.savefig(loc+f"peri_{peri}_ecc_{ec}_incl_{incl}"
                     +f"_retro_{retro}_beta_{beta}_vexp_{vexp}"
                     +".png",dpi=1200)
+    plt.show()
+
+
+def show_slopes(ec=1e-4,
+                incl=1e-4,
+                retro=1e-4,
+                beta=0,
+                gamma=-1.3,
+                vexp=1,
+                loc=None,
+                rmin=0.15,
+                rmax=0.5,
+                compensation=-2.5,
+                peris=[4,6,8,10],
+                log=True):
+    """
+    The intention is to see what we have to really do to explain the slope
+    in flux(r) of -2,5. 
+
+    Parameters
+    ----------
+    ec : TYPE, optional
+        DESCRIPTION. The default is 1e-4.
+    incl : TYPE, optional
+        DESCRIPTION. The default is 1e-4.
+    retro : TYPE, optional
+        DESCRIPTION. The default is 1e-4.
+    beta : TYPE, optional
+        DESCRIPTION. The default is 0.
+    gamma : TYPE, optional
+        DESCRIPTION. The default is -1.3.
+    vexp : TYPE, optional
+        DESCRIPTION. The default is 1.
+    loc : TYPE, optional
+        DESCRIPTION. The default is None.
+    rmin : TYPE, optional
+        DESCRIPTION. The default is 0.15.
+    rmax : TYPE, optional
+        DESCRIPTION. The default is 0.5.
+    compensation : TYPE, optional
+        DESCRIPTION. The default is -2.5.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    fig, ax = plt.subplots()
+    for peri in peris:
+        data = construct_perihel_n(peri,days=20,step_hours=8)
+
+        r_vector = data["r_sc"].to_numpy()
+        v_r_vector = data["v_sc_r"].to_numpy()
+        v_phi_vector = (data["v_sc_t"].to_numpy())
+        S_front_vector = data["area_front"].to_numpy()
+        S_side_vector = data["area_side"].to_numpy()
+        jd = data["jd"].to_numpy()
+
+        flux = bound_flux_vectorized(
+            r_vector = r_vector,
+            v_r_vector = v_r_vector,
+            v_phi_vector = v_phi_vector,
+            S_front_vector = S_front_vector,
+            S_side_vector = S_side_vector,
+            ex = ec,
+            incl = incl,
+            retro = retro,
+            beta = beta,
+            gamma = gamma,
+            velocity_exponent = vexp,
+            n = 7e-9)
+
+        ax.plot(r_vector,flux/(r_vector**compensation))
+
+    ax.set_xlim(rmin,rmax)
+    #ax.set_xscale("log")
+    if log:
+        ax.set_yscale("log")
+    ax.set_xlabel("Heliocentric distance [AU]")
+    ax.set_ylabel("Compensated model flux [arb.u.]")
+    ax.annotate(f"vexp = {vexp}", xy=(0.05, 0.1),
+                 xycoords='axes fraction')
+    ax.annotate(f"gamma = {gamma}", xy=(0.35, 0.1),
+                 xycoords='axes fraction')
+    ax.annotate(f"beta = {beta}", xy=(0.65, 0.1),
+                 xycoords='axes fraction')
+    fig.suptitle(f"All the fluxes - compensated by {compensation}")
     plt.show()
 
 
@@ -617,6 +714,227 @@ def plot_compare(ec=1e-4,
     plt.show()
 
 
+def show_relative_velocity(rmin=0.,
+                           rmax=0.5,
+                           peris=[1,4,6,8,10]):
+    """
+    Creates a plot of relative speed between PSP and circular dust
+    for different orbital groups.
+
+    Parameters
+    ----------
+    rmin : float, optional
+        lower x lim. The default is 0..
+    rmax : float, optional
+        upper x lim. The default is 0.5.
+    peris : list of int, optional
+        Which perihelia to show. The default is [1,4,6,8,10].
+
+    Returns
+    -------
+    None.
+
+    """
+    fig, ax = plt.subplots()
+    for i,peri in enumerate(peris):
+        data = construct_perihel_n(peri,days=30)
+        r_vector = data["r_sc"].to_numpy()
+        v_r_vector = data["v_sc_r"].to_numpy()
+        v_phi_vector = (data["v_sc_t"].to_numpy())
+        v_phi_dust = ((GM/(r_vector*AU))**0.5)/1000
+        v_rel_phi = np.abs(v_phi_vector-v_phi_dust)
+        v_rel_tot = np.sqrt(v_rel_phi**2 + v_r_vector**2)
+
+        ax.plot(r_vector,v_rel_tot,
+                label=f"peri {peri}",c=f"C{i}")
+        # ax.plot(r_vector,v_phi_dust/1000,label=None,ls="dashed",c=f"C{i}")
+
+    ax.set_xlim(rmin,rmax)
+    #ax.set_xscale("log")
+    #ax.set_yscale("log")
+    ax.set_xlabel("Heliocentric distance [AU]")
+    ax.set_ylabel("Relative velocity [km/s]")
+    ax.legend()
+    plt.show()
+
+
+def show_slopes_panels(ec=1e-4,
+                       incl=1e-4,
+                       retro=1e-4,
+                       beta=0,
+                       gamma=-1.3,
+                       vexp=1,
+                       loc=None,
+                       name="compensated_model_test",
+                       rmin=0.15,
+                       rmax=0.5,
+                       compensation=-2.5,
+                       peris=[1,4,6,8,10],
+                       att=None,
+                       att_values=[0],
+                       overplot=None):
+
+    fig,ax = plt.subplots(5,figsize=(4,4))
+    for i,peri in enumerate(peris):
+        enc = encounter_group(peri)
+        data = construct_perihel_n(peri,days=20,step_hours=8,
+                                   outbound_only=True)
+        r_vector = data["r_sc"].to_numpy()
+        v_r_vector = data["v_sc_r"].to_numpy()
+        v_phi_vector = (data["v_sc_t"].to_numpy())
+        S_front_vector = data["area_front"].to_numpy()
+        S_side_vector = data["area_side"].to_numpy()
+        midvals = []
+        if att is None:
+            att_values = [0]
+        lines=["-k",":k","--k","-grey",":grey","--grey"]
+        for j,value in enumerate(att_values):
+            if att == "ec":
+                ec = value
+                legend_label = lambda v: r"$e=\,$"+f"{np.around(v,2)}"
+            elif att == "incl":
+                incl = value
+                legend_label = lambda v: r"$\theta=\,$"+f"{np.around(v,2)}"
+            elif att == "retro":
+                retro = value
+                legend_label = lambda v: r"$rp=\,$"+f"{np.around(v,2)}"
+            elif att == "beta":
+                beta = value
+                legend_label = lambda v: r"$\beta=\,$"+f"{v}"
+            elif att == "gamma":
+                gamma = value
+                legend_label = lambda v: r"$\gamma=\,$"+f"{v}"
+            elif att == "vexp":
+                vexp = value
+                legend_label = lambda v: r"$\epsilon=\,$"+f"{v}"
+            elif att is None:
+                pass
+                legend_label = lambda v: None
+            else:
+                raise Exception(
+                    'bad att, allowed: ["ec","inlc","retro","beta",'
+                    +'"gamma","vexp",None]')
+
+            flux = bound_flux_vectorized(
+                r_vector = r_vector,
+                v_r_vector = v_r_vector,
+                v_phi_vector = v_phi_vector,
+                S_front_vector = S_front_vector,
+                S_side_vector = S_side_vector,
+                ex = ec,
+                incl = incl,
+                retro = retro,
+                beta = beta,
+                gamma = gamma,
+                velocity_exponent = vexp,
+                n = 7e-9)
+    
+            comp_flux = flux/(r_vector**compensation)*10**4
+            midvals.append(comp_flux[np.argmin(np.abs(r_vector-0.325))])
+            ax[i].plot(r_vector,
+                       comp_flux*(2.25/midvals[-1]),
+                       lines[j],label=legend_label(value))
+
+        if overplot is not None:
+            flux = bound_flux_vectorized(
+                r_vector = r_vector,
+                v_r_vector = v_r_vector,
+                v_phi_vector = v_phi_vector,
+                S_front_vector = S_front_vector,
+                S_side_vector = S_side_vector,
+                ex = overplot[0],
+                incl = overplot[1],
+                retro = overplot[2],
+                beta = overplot[3],
+                gamma = overplot[4],
+                velocity_exponent = overplot[5],
+                n = 7e-9)
+            comp_flux = flux/(r_vector**compensation)*10**4
+            ax[i].plot(r_vector,
+                       comp_flux*(2.25
+                           /comp_flux[np.argmin(np.abs(r_vector-0.325))]),
+                       "--k")
+
+        ax[i].set_xlim(0.15,0.5)
+        ax[i].set_ylabel(f"Group {enc}")
+        ax[i].yaxis.set_major_locator(MaxNLocator(nbins=4,integer=True))
+        if i!=4:
+            ax[i].xaxis.set_ticklabels([])
+        ax[i].set_ylim(0,4.8)
+
+    if att is not None:
+        ax[0].legend(loc=2,ncol=3,fontsize="small",frameon=False)
+    #ax[0].set_title("All the fluxes, "
+    #                +f"compensated by $R^{{{compensation}}}$")
+    ax[4].set_xlabel("R [AU]")
+    ax[2].set_ylabel(f"Flux [$C \cdot s^{{-1}} AU^{{{-compensation}}}$] \n"+
+                     "Group 3",linespacing=2)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    if loc is not None:
+        plt.savefig(loc+name+".pdf",format="pdf")
+    plt.show()
+
+
+
+
+#%%
+if __name__ == "__main__":
+
+    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
+
+    #The vanilla case
+    show_slopes_panels(loc=loc,
+                       name="compensated_vanilla_model")
+    
+    #Different speed exponents
+    show_slopes_panels(att="vexp",att_values=[1,2,3],
+                       loc=loc,
+                       name="compensated_model_vexp")
+
+    #Different spatial scaling
+    show_slopes_panels(att="gamma",att_values=[-1.3,-2,-3],
+                       loc=loc,
+                       name="compensated_model_gamma")
+    
+    #Different beta
+    show_slopes_panels(att="beta",att_values=[0,0.25,0.5],
+                       loc=loc,
+                       name="compensated_model_beta")
+    
+    #Different eccentricity
+    show_slopes_panels(att="ec",att_values=[1e-4,0.25,0.5],
+                       loc=loc,
+                       name="compensated_model_ec")
+    
+    #Different inclination
+    show_slopes_panels(att="incl",att_values=[1e-4,15,45],
+                       loc=loc,
+                       name="compensated_model_incl")
+    
+    #Different retrograde
+    show_slopes_panels(att="retro",att_values=[1e-4,0.02,0.1],
+                       loc=loc,
+                       name="compensated_model_retro")
+
+    #Vanilla "-" and the best without adjustment to the exponents "--"
+    show_slopes_panels(overplot=[0.5,45,0.1,0.5,-1.3,1],
+                       loc=loc,
+                       name="compensated_insufficient_model")
+
+    #Solve it with gamma
+    show_slopes_panels(gamma=-3)
+
+    #Solve it with vexp
+    show_slopes_panels(vexp=2)
+
+    #A possible combination of the two
+    show_slopes_panels(gamma=-2,
+                       vexp=1.5)
+
+
+
+
 
 #%%
 if __name__ == "__main__":
@@ -650,5 +968,9 @@ if __name__ == "__main__":
                      peri=peri,loc=loc,ymax=ymax)
         plot_compare(att="vexp",att_values=[1,1.1,2,4.15],
                      peri=peri,loc=loc,ymax=ymax)
+
+
+    show_relative_velocity(peris=[1,4,6,8,10])
+
 
 
