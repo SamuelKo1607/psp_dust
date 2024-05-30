@@ -116,7 +116,7 @@ def hand_potential(epoch,vdc):
     v2 = np.interp(epoch,v2e,v2w,left=np.nan,right=np.nan)
     v3 = np.interp(epoch,v3e,v3w,left=np.nan,right=np.nan)
     v4 = np.interp(epoch,v4e,v4w,left=np.nan,right=np.nan)
-    v = v1+v2+v3+v4
+    v = (v1+v2+v3+v4)/4
     return v
 
 
@@ -157,7 +157,7 @@ def get_samples(vdcs,
                 pass
             else:
                 body_potential = hand_potential(epoch,cdf)
-                if np.isfinite(body_potential) and -50<body_potential<50:
+                if np.isfinite(body_potential) and -20<body_potential<20:
                     body_potentials = np.append(body_potentials,body_potential)
                     epochs = np.append(epochs,epoch)
                     bar()
@@ -192,19 +192,20 @@ def main(samples=100,
 
     fig, ax = plt.subplots()
     ax.set_xlabel(r"Heliocentric distance $[AU]$")
-    ax.set_ylabel(r"$V_{sc} = -V1 -V2 -V3 -V4 \, [V]$")
-    ax.scatter(rs,body_potentials,c="grey",s=0.5,alpha=0.2,
-               label="Potential")
+    ax.set_ylabel(r"$V_{sc} [V]$")
+    ax.scatter(rs[::],body_potentials[::],c="darkgrey",s=0.5,alpha=1,
+               edgecolor="none",label="Potential")
     ax.plot(mid_r,means,c="k",label="Mean")
-    ax.plot([0.1,1],[0,0],c="k",ls="dashed")
-    ax.plot(mid_r,lowers,c="k",ls="dotted",
+    ax.plot([0.1,1],[0,0],c="k",ls="dotted")
+    ax.plot(mid_r,lowers,c="k",ls="dashed",
             label=f"{int(100*quantile)}\%")
-    ax.plot(mid_r,uppers,c="k",ls="dotted")
+    ax.plot(mid_r,uppers,c="k",ls="dashed")
     ax.legend(fontsize="small",ncol=3,loc=4)
     ax.set_xlim(0.1,0.95)
-    ax.set_ylim(-20,20)
+    ax.set_ylim(-5,5)
+    fig.tight_layout()
     if filename is not None:
-        fig.savefig(figures_location+filename+".png",dpi=600)
+        fig.savefig(figures_location+filename+".pdf",format="pdf")
     fig.show()
 
     return epochs, rs, body_potentials
