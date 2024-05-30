@@ -140,11 +140,12 @@ def plot_maxima_zoom(data,
 
 def density_scaling(gamma=-1.3,
                     ec=0.001,
-                    r_min=0.04,
-                    r_max=1.1,
-                    size=50000,
+                    r_min=0.08,
+                    r_max=1.22,
+                    size=200000,
                     mu=GM,
-                    loc=figures_location):
+                    loc=figures_location,
+                    mute=False):
     """
     Analyzes if the slope of heliocentric distance distribution 
     has changed or not.
@@ -172,38 +173,91 @@ def density_scaling(gamma=-1.3,
 
     """
 
-    r_peri_proposed = np.random.uniform(r_min/3,r_max,size)
+    r_peri_proposed = np.random.uniform(r_min/10,r_max,size)
     thresholds = ((r_peri_proposed)**(gamma+1))/max(r_peri_proposed**(gamma+1))
     r_peri = r_peri_proposed[thresholds > np.random.uniform(0,1,size)]
     spreaded = np.zeros(0)
     all_sampled = []
     for r in tqdm(r_peri):
-        samples = r_smearing(r,ec,size=1000,burnin=200)
+        samples = r_smearing(r,ec,size=500,burnin=100)
         all_sampled.append(samples)
-    spreaded = np.reshape(all_sampled,newshape=(1000*len(r_peri)))
+    spreaded = np.reshape(all_sampled,newshape=(500*len(r_peri)))
 
-    bins = np.linspace(r_min,r_max,int((size/10)**0.5))
+    bins = np.linspace(r_min,r_max,int((size/50)**0.5))
     bincenters = (bins[1:]+bins[:-1])/2
 
     hist_orig = np.histogram(r_peri,bins,weights=r_peri**(-gamma-1))
     hist_mod = np.histogram(spreaded,bins,weights=spreaded**(-gamma-1))
 
-    fig,ax = plt.subplots()
-    ax.hlines(1,r_min,r_max,"grey")
-    ax.step(bincenters, hist_orig[0]/np.mean(hist_orig[0]),
-            where='mid', label="starting")
-    ax.step(bincenters, hist_mod[0]/np.mean(hist_mod[0]),
-            where='mid', label="smeared")
-    ax.legend(fontsize="small")
-    ax.text(0.1,1.15,rf"e = {ec}, $\gamma$ = {gamma}")
-    ax.set_xlabel("Heliocentric distance [AU]")
-    ax.set_ylabel(r"$\gamma$-compensated pdf [arb.u.]")
-    ax.set_ylim(0.8,1.2)
-    ax.set_xlim(r_min,r_max)
-    ax.set_aspect(1.5)
+    if mute:
+        return bincenters, hist_orig, hist_mod
+    else:
+        fig,ax = plt.subplots()
+        ax.hlines(1,r_min,r_max,"k",ls="dotted")
+        ax.step(bincenters, hist_orig[0]/np.mean(hist_orig[0]),
+                where='mid', label="$f(r_{peri})$", c="grey")
+        ax.step(bincenters, hist_mod[0]/np.mean(hist_mod[0]),
+                where='mid', label="$f(r)$", c="k")
+        ax.legend(fontsize="small",loc=2)
+        ax.text(0.15,0.83,rf"$e$ = {ec}, $\gamma$ = {gamma}")
+        ax.set_xlabel("Heliocentric distance [AU]")
+        ax.set_ylabel(r"$\gamma$-compensated pdf"+"\n"
+                      +r"[$C \cdot m^{-2}AU^{-\gamma-1}$]",linespacing=1.2)
+        ax.set_ylim(0.8,1.2)
+        ax.set_xlim(0.1,1.2)
+        ax.set_aspect(1.5)
+        fig.tight_layout()
+        if loc is not None:
+            plt.savefig(loc+f"spread_{gamma}_{ec}"+".pdf",format="pdf")
+        plt.show()
+
+
+def density_scaling_multiple(ec=[0.2,0.8],
+                             gamma=-1.3,
+                             r_min=0.08,
+                             r_max=1.22,
+                             loc=figures_location,
+                             *kwargs):
+    """
+    Analyzes if the slope of heliocentric distance distribution 
+    has changed or not. Shows multiple plots.
+
+    Parameters
+    ----------
+    ec : list of float, optional
+        Eccentricity. The default is [0.2,0.8].
+
+    Returns
+    -------
+    None.
+
+    """
+
+    fig,axs = plt.subplots(1,len(ec),sharey=True)
+    fig.subplots_adjust(wspace=0.05)
+    for i,ax in enumerate(axs):
+        bincenters, hist_orig, hist_mod = density_scaling(gamma=gamma,
+                                                          ec=ec[i],
+                                                          r_min=r_min,
+                                                          r_max=r_max,
+                                                          mute=True,
+                                                          *kwargs)
+        ax.hlines(1,r_min,r_max,"k",ls="dotted")
+        ax.step(bincenters, hist_orig[0]/np.mean(hist_orig[0]),
+                where='mid', label="$f(r_{peri})$", c="grey")
+        ax.step(bincenters, hist_mod[0]/np.mean(hist_mod[0]),
+                where='mid', label="$f(r)$", c="k")
+        ax.text(0.15,0.83,rf"$e$ = {ec[i]}"+"\n"+rf"$\gamma$ = {gamma}",
+                linespacing=1.2)
+        ax.set_xlabel("Heliocentric \n distance "+"[AU]",linespacing=1.2)
+        ax.set_ylim(0.8,1.2)
+        ax.set_xlim(0.1,1.2)
+    axs[0].set_ylabel(r"$\gamma$-compensated pdf"+"\n"
+                      +r"[$C \cdot m^{-2}AU^{-\gamma-1}$]",linespacing=1.2)
+    axs[0].legend(fontsize="small",loc=2)
     fig.tight_layout()
     if loc is not None:
-        plt.savefig(loc+f"spred_{gamma}_{ec}"+".png",dpi=1200)
+        plt.savefig(loc+f"spread_{gamma}_{ec}"+".pdf",format="pdf")
     plt.show()
 
 
