@@ -3,6 +3,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import datetime as dt
+from conversions import jd2date
+from conversions import date2jd
+from ephemeris import fetch_heliocentric
+from paths import solo_ephemeris_file
+f_hel_r, *rest = fetch_heliocentric(solo_ephemeris_file,cache_psp=False)
 mpl.rcParams['figure.dpi']= 600
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -62,26 +68,57 @@ if __name__ == "__main__":
     orbelts_df = load_orbital_elements(orbelts_file)
     so_summary_df = load_so_summary(so_summary_file)
 
+    # Eccentricity
     f, ax = plt.subplots()
     e = orbelts_df["e"][orbelts_df["e"]<=1]
-    plt.hist(e,bins=100)
-    plt.xlabel("eccentricity")
-    plt.text(.5, .95, r"$\mu(e)=\,$"+f"{np.mean(e):.2f}",
+    ax.hist(e,bins=100,density=True)
+    ax.set_xlabel("eccentricity")
+    ax.text(.5, .95, r"$\mu(e)=\,$"+f"{np.mean(e):.2f}",
              ha='left', va='top', transform=ax.transAxes)
     plt.show()
 
-    i = orbelts_df["i"][orbelts_df["e"]<=1]
+    # Inclination
     f, ax = plt.subplots()
-    plt.hist(-np.abs(i-90)+90,bins=100)
-    plt.xlabel("inclination")
-    plt.text(.5,.95,r"$\mu(i)=\,$"+f"{np.mean(-np.abs(i-90)+90):.2f}",
+    i = orbelts_df["i"][orbelts_df["e"]<=1]
+    ax.hist(-np.abs(i-90)+90,bins=100,density=True)
+    ax.set_xlabel("inclination")
+    ax.text(.5,.95,r"$\mu(i)=\,$"+f"{np.mean(-np.abs(i-90)+90):.2f}",
              ha='left',va='top',transform=ax.transAxes)
     plt.text(.5,.85,r"$\%retro=\,$"+f"{100*np.sum(i>90)/np.sum(i>=0):.2f}",
              ha='left',va='top',transform=ax.transAxes)
     plt.show()
 
-    
+    # SolO dust flux
 
+    f, ax = plt.subplots()
+    ax2 = ax.twinx()
+    jd = so_summary_df["ephemjd"]
+    r = f_hel_r(jd)
+    date = [jd2date(j) for j in jd]
+    flux = sum([so_summary_df[f"flux{i}_/m2d"] for i in range(8)][:8])
+    ax.semilogy(date,flux,label="all")
+    flux = sum([so_summary_df[f"flux{i}_/m2d"] for i in range(8)][:1])
+    ax.semilogy(date,flux,label="bin0")
+    ax2.plot(date,r,"k")
+    ax2.set_ylim(0,1.5)
+    ax.set_ylabel(r"flux [$m^{-2} s^{-1}$]")
+    ax.set_xlim(dt.datetime(2020,1,1),dt.datetime(2024,1,1))
+    ax.legend()
+    plt.show()
+
+    # SolO flux vs r
+    f, ax = plt.subplots()
+    jd = so_summary_df["ephemjd"]
+    r = f_hel_r(jd)
+    date = [jd2date(j) for j in jd]
+    flux = sum([so_summary_df[f"flux{i}_/m2d"] for i in range(8)][:1])
+    ax.scatter(r[jd<date2jd(dt.datetime(2024,1,1))],
+               flux[jd<date2jd(dt.datetime(2024,1,1))],
+               label="bin0")
+    ax.set_yscale("log")
+    ax.set_xlabel("heliocentric distance [AU]")
+    ax.set_ylabel(r"flux [$m^{-2} s^{-1}$]")
+    plt.show()
 
 
 
