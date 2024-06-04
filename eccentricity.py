@@ -910,6 +910,8 @@ def show_slopes_panels(ec=1e-4,
                        "--k")
 
         ax[i].set_xlim(0.15,0.5)
+        ax[i].grid(color='lightgrey', linestyle='-',
+                   linewidth=1, axis="y", which = "both", alpha=0.5)
         ax[i].set_ylabel(f"Group {enc}")
         ax[i].yaxis.set_major_locator(MaxNLocator(nbins=4,integer=True))
         if i!=4:
@@ -917,7 +919,7 @@ def show_slopes_panels(ec=1e-4,
         ax[i].set_ylim(0,4.8)
 
     if att is not None:
-        ax[0].legend(loc=2,ncol=3,fontsize="small",frameon=False)
+        ax[0].legend(loc=2,ncol=3,fontsize="small",frameon=True,edgecolor="w")
     #ax[0].set_title("All the fluxes, "
     #                +f"compensated by $R^{{{compensation}}}$")
     ax[4].set_xlabel("R [AU]")
@@ -976,16 +978,20 @@ if __name__ == "__main__":
                        loc=loc,
                        name="compensated_insufficient_model")
 
-    #Solve it with gamma
-    show_slopes_panels(gamma=-3)
+    #Vanilla "-" and Szalay "--"
+    show_slopes_panels(overplot=[1e-4,1e-4,1e-4,0,-1.3,4.15],
+                       loc=loc,
+                       name="compensated_szalay")
 
-    #Solve it with vexp
-    show_slopes_panels(vexp=2)
+    #Vanilla "-" and the best without adjustment to the exponents "--"
+    show_slopes_panels(overplot=[0.5,45,0.1,0.5,-1.5,2],
+                       loc=loc,
+                       name="compensated_sufficient_model")
 
-    #A possible combination of the two
-    show_slopes_panels(gamma=-2,
-                       vexp=1.5)
-
+    #A viable option
+    show_slopes_panels(overplot=[0.3,25,0.05,0.25,-1.8,2],
+                       loc=loc,
+                       name="compensated_viable_model")
 
 
 
