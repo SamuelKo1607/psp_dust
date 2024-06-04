@@ -7,6 +7,8 @@ import datetime as dt
 from scipy import stats
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+from conversions import jd2date
+from paths import figures_location
 
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -149,7 +151,6 @@ def evaluate_match(s_n,s_e,s_r,s_vr,s_vt,
     return distance,v_rad,beta_lo,beta_hi,bound_lo,bound_hi
 
 
-
 def main(solo_df, psp_df):
     matches = find_matches(solo_df, psp_df)
 
@@ -161,24 +162,29 @@ def main(solo_df, psp_df):
     bound_los = np.zeros(0)
     bound_his = np.zeros(0)
 
+    solo_jds = np.zeros(0)
+    psp_jds = np.zeros(0)
+
     for m in matches:
-        s_hit_df = get_near(solo_df,m[0])
+        s_hit_df = get_near(solo_df,m[0],days=7)
+        solo_jds = np.append(solo_jds,m[0])
         s_flux = (np.sum(s_hit_df['Fluxes [/day]'])
                   /np.sum(s_hit_df['Detection time [hours]']
                           *s_hit_df['Area front [m^2]']))
         s_r = np.mean(s_hit_df['Radial distance [au]'])
         s_v_rad = np.mean(s_hit_df['Radial velocity [km/s]'])
         s_v_tan = np.mean(s_hit_df['Tangential velocity [km/s]'])
-        print("solo: ",s_r, s_v_rad, s_v_tan, s_flux)
+        print("solo: ",jd2date(m[0]).date(),s_r, s_v_rad, s_v_tan, s_flux)
 
-        p_hit_df = get_near(psp_df,m[1])
+        p_hit_df = get_near(psp_df,m[1],days=7)
+        psp_jds = np.append(psp_jds,m[1])
         p_flux = (np.sum(p_hit_df['Count corrected [/day]'])
                   /np.sum(p_hit_df['Detection time [hours]']
                           *p_hit_df['Area front [m^2]']))
         p_r = np.mean(p_hit_df['Radial distance [au]'])
         p_v_rad = np.mean(p_hit_df['Radial velocity [km/s]'])
         p_v_tan = np.mean(p_hit_df['Tangential velocity [km/s]'])
-        print("psp: ",p_r, p_v_rad, p_v_tan, p_flux)
+        print("psp: ",jd2date(m[1]).date(),p_r, p_v_rad, p_v_tan, p_flux)
 
         distance,v_rad,beta_lo,beta_hi,bound_lo,bound_hi = evaluate_match(
             np.sum(s_hit_df['Fluxes [/day]']),
@@ -209,13 +215,34 @@ def main(solo_df, psp_df):
     plt.show()
 
     plt.scatter(v_rads,raws,color="k",label="raw")
-    plt.vlines(v_rads,beta_los,beta_his,
-               color="red",alpha=0.5,label="if all beta")
-    plt.vlines(v_rads,bound_los,bound_his,
-               color="blue",alpha=0.5,label="if all bound")
-    plt.xlabel("Radial speed [km/s]")
-    plt.ylabel("PSP vs SolO sensitivity")
-    plt.legend(loc=9,fontsize="small")
+    offset = np.zeros(6)
+    offset[0] = -3
+    offset[5] = 3
+    offset[1] = 1.5
+    offset[3] = -1.5
+    for i in range(len(psp_jds)):
+        plt.annotate(jd2date(psp_jds[i]).date(),
+                     (v_rads[i]+offset[i],raws[i]+0.01),
+                     c="k",ha="center",fontsize="small")
+        plt.annotate(jd2date(solo_jds[i]).date(),
+                     (v_rads[i]+offset[i],raws[i]-0.02),
+                     c="grey",ha="center",fontsize="small")
+    plt.text(0.05, 0.92, 'PSP date',
+             horizontalalignment='left',
+             verticalalignment='top',
+             c="k", fontsize="small",
+             transform = plt.gca().transAxes)
+    plt.text(0.05, 0.85, 'SolO date',
+             horizontalalignment='left',
+             verticalalignment='top',
+             c="grey", fontsize="small",
+             transform = plt.gca().transAxes)
+    plt.xlabel(r"Radial speed [$km/s$]")
+    plt.ylabel("14 days flux PSP/SolO [$1$]")
+    plt.xlim(-26,26)
+    plt.ylim(0.26,0.54)
+    plt.tight_layout()
+    plt.savefig(figures_location+"case_study"+".pdf",format="pdf")
     plt.show()
 
     return matches
