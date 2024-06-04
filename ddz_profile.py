@@ -690,8 +690,6 @@ def estimate_powerlaws_all(obs,
                            dslope=0.3,
                            max_r=0.5,
                            encounter=None,
-                           maxima_indices=[5,4,4,7,9,2,5,4,
-                                           4,4,4,4,4,4,4,6],
                            loc=None):
     """
     A paper plot. A compensated plot of the outbound PSP flux between 0.15
@@ -709,11 +707,7 @@ def estimate_powerlaws_all(obs,
     max_r : float, optional
         Maximum heliocentric distance. The default is 0.5.
     encounter : int of None, optional
-        If not None, only this encounter is shown. The default is None.
-    maxima_indices : list of int, optional
-        The indices of individual post-perihelion data, 
-        where the maxima are located. Non-consequential for the paper plot.
-        The default is [5,4,4,7,9,2,5,4,4,4,4,4,4,4,4,6].                                         4,4,4,4,4,4,4,6].
+        If not None, only this encounter is shown. The default is None.                                        4,4,4,4,4,4,4,6].
     loc : str, optional
         Whete to save the plot. The default is None.
 
@@ -780,6 +774,8 @@ def estimate_powerlaws_all(obs,
                        c="k",ls="dashed")
         ax[i].set_ylabel(f"Group {enc}")
         ax[i].yaxis.set_ticks(np.array([2,4]))
+        ax[i].grid(color='lightgrey', linestyle='-',
+                   linewidth=1, axis="y", which = "both", alpha=0.5)
         if i!=4:
             ax[i].xaxis.set_ticklabels([])
         ax[i].set_ylim(bottom=0,top=5)
@@ -792,6 +788,55 @@ def estimate_powerlaws_all(obs,
     fig.subplots_adjust(hspace=0.1)
     if loc is not None:
         plt.savefig(loc+f"compensated_flux.pdf",format="pdf")
+    plt.show()
+
+
+def maxima_plot(obs,
+                days=7,
+                loc=None):
+
+    obs = [ob for ob in obs if (ob.duty_hours > 0.1
+                                and ob.heliocentric_distance < 0.3
+                                and ob.encounter > 0)]
+
+    encounters = np.array([ob.encounter for ob in obs])
+    encounter_groups = np.array([ob.encounter_group for ob in obs])
+    jds_obs = np.array([ob.jd_center for ob in obs])
+
+    fig,ax = plt.subplots(5,figsize=(4,4))
+
+    for i,gr in enumerate(set(encounter_groups)):
+        for j,enc in enumerate(set(encounters[encounter_groups==gr])):
+
+            #TBD find the minimum more nicely, using interp
+
+            r = np.array([ob.heliocentric_distance for ob in obs
+                          if (ob.encounter == enc)])
+            jd = np.array([ob.jd_center for ob in obs
+                          if (ob.encounter == enc)])
+            index_peri = np.argmin(r)
+            peri_jd = jd[index_peri]
+            compensated_hours = (jd - peri_jd)*24
+
+            flux_obs = np.array([ob.count_corrected
+                                 /ob.duty_hours for ob in obs
+                                 if (ob.encounter == enc)])/3600
+    
+            ax[i].scatter(compensated_hours,flux_obs,c="k",s=2)
+
+        ax[i].set_xlim(-days*24,days*24)
+        ax[i].set_ylabel(f"Group {gr}")
+        if i!=4:
+            ax[i].xaxis.set_ticklabels([])
+        ax[i].set_ylim(bottom=0)
+
+    ax[4].set_xlabel("Time since perihelia [h]")
+    ax[2].set_ylabel("ylabel "+"[$unit$]"+" \n"+
+                     "Group 3",linespacing=2)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    if loc is not None:
+        plt.savefig(loc+"maxima.pdf",format="pdf")
     plt.show()
 
 
@@ -910,7 +955,11 @@ if __name__ == "__main__":
          velocity_exponent=1)
 
 
-
+#%%
+if __name__ == "__main__":
+    psp_obs = load_all_obs(all_obs_location)
+    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
+    maxima_plot(psp_obs,loc=loc)
 
 
 
