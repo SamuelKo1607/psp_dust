@@ -8,7 +8,7 @@ from conversions import jd2date
 from conversions import date2jd
 from ephemeris import fetch_heliocentric
 from paths import solo_ephemeris_file
-f_hel_r, *rest = fetch_heliocentric(solo_ephemeris_file,cache_psp=False)
+from paths import psp_ephemeris_file
 mpl.rcParams['figure.dpi']= 600
 import figure_standards as figstd
 axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
@@ -18,6 +18,7 @@ axes_size = figstd.set_rcparams_dynamo(mpl.rcParams, num_cols=1, ls='thin')
 def load_orbital_elements(file):
     df = pd.read_fwf(file, header=None, engine='python',
                      names=['computedjd',
+                            'mass_kg',
                             'a_km',
                             'e',
                             'i',
@@ -62,8 +63,9 @@ def load_so_summary(file):
 #%%
 if __name__ == "__main__":
 
-    orbelts_file = os.path.join("data_synced","so_IMEX_orbelts.txt")
-    so_summary_file = os.path.join("data_synced","data_so_summaryall.txt")
+    f_hel_r, *rest = fetch_heliocentric(psp_ephemeris_file,cache_psp=False)
+    orbelts_file = os.path.join("data_synced","sp_orbelts_mass.txt")
+    so_summary_file = os.path.join("data_synced","sp_summaryall.txt")
 
     orbelts_df = load_orbital_elements(orbelts_file)
     so_summary_df = load_so_summary(so_summary_file)
@@ -71,25 +73,32 @@ if __name__ == "__main__":
     # Eccentricity
     f, ax = plt.subplots()
     e = orbelts_df["e"][orbelts_df["e"]<=1]
-    ax.hist(e,bins=100,density=True)
+    ax.hist(e,bins=100,density=True,label="all",alpha=0.3)
+    e = orbelts_df["e"][(orbelts_df["e"]<=1)*(orbelts_df["mass_kg"]<=1e-8)]
+    ax.hist(e,bins=100,density=True,label=r"$m<1^{-7}$",alpha=0.3)
     ax.set_xlabel("eccentricity")
     ax.text(.5, .95, r"$\mu(e)=\,$"+f"{np.mean(e):.2f}",
              ha='left', va='top', transform=ax.transAxes)
+    ax.legend(loc=2)
     plt.show()
 
     # Inclination
     f, ax = plt.subplots()
     i = orbelts_df["i"][orbelts_df["e"]<=1]
-    ax.hist(-np.abs(i-90)+90,bins=100,density=True)
+    ax.hist(-np.abs(i-90)+90,bins=100,density=True,
+            label="all",alpha=0.3)
+    i = orbelts_df["i"][(orbelts_df["e"]<=1)*(orbelts_df["mass_kg"]<=1e-8)]
+    ax.hist(-np.abs(i-90)+90,bins=100,density=True,
+            label=r"$m<1^{-7}$",alpha=0.3)
     ax.set_xlabel("inclination")
     ax.text(.5,.95,r"$\mu(i)=\,$"+f"{np.mean(-np.abs(i-90)+90):.2f}",
              ha='left',va='top',transform=ax.transAxes)
     plt.text(.5,.85,r"$\%retro=\,$"+f"{100*np.sum(i>90)/np.sum(i>=0):.2f}",
              ha='left',va='top',transform=ax.transAxes)
+    ax.legend(loc=2)
     plt.show()
 
     # SolO dust flux
-
     f, ax = plt.subplots()
     ax2 = ax.twinx()
     jd = so_summary_df["ephemjd"]
