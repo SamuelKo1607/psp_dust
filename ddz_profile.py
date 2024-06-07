@@ -808,12 +808,17 @@ def maxima_plot(obs,
     for i,gr in enumerate(set(encounter_groups)):
         for j,enc in enumerate(set(encounters[encounter_groups==gr])):
 
+
+
             #TBD find the minimum more nicely, using interp
 
             r = np.array([ob.heliocentric_distance for ob in obs
                           if (ob.encounter == enc)])
             jd = np.array([ob.jd_center for ob in obs
                           if (ob.encounter == enc)])
+
+            r_interp =
+
             index_peri = np.argmin(r)
             peri_jd = jd[index_peri]
             compensated_hours = (jd - peri_jd)*24
