@@ -7,6 +7,7 @@ from matplotlib.ticker import MaxNLocator
 import datetime as dt
 from numba import jit
 from tqdm.auto import tqdm
+from matplotlib.ticker import FormatStrFormatter
 
 from eccentricity_core import bound_flux_vectorized
 from eccentricity_core import r_smearing
@@ -827,6 +828,54 @@ def show_slopes_panels(ec=1e-4,
                        att=None,
                        att_values=[0],
                        overplot=None):
+    """
+    A plot of 5 panels, one for each orbital group, showing the 
+    compensated slope of flux in the outbound leg of an orbit.
+
+    Parameters
+    ----------
+    ec : float, optional
+        Eccentricity. The default is 1e-4.
+    incl : float, optional
+        Inlicnation in degrees. The default is 1e-4.
+    retro : float, optional
+        Retrograde fraction of the grains. The default is 1e-4.
+    beta : float, optional
+        RAdiation pressure parameter. The default is 0.
+    gamma : float, optional
+        Number density scaling. The default is -1.3.
+    vexp : float, optional
+        The exponent on speed. The default is 1.
+    loc : str, optional
+        Figures folder. The default is None.
+    name : str, optional
+        File name. The default is "compensated_model_test".
+    rmin : float, optional
+        Min AU to include. The default is 0.15.
+    rmax : float, optional
+        Max AU to include. The default is 0.5.
+    compensation : float, optional
+        The exponent to compensate with. The default is -2.5.
+    peris : list of int, optional
+        The orbits to show. The default is [1,4,6,8,10].
+    att : str, optional
+        The name of the attribute to vary. The default is None.
+    att_values : list of float, optional
+        The values of att to compare. The default is [0].
+    overplot : list of float, optional
+        The list of parameters: [ec, incl, retro, beto, gamma, vexp]. 
+        The default is None.
+
+    Raises
+    ------
+    Exception
+        If the att is an unknown str.
+
+    Returns
+    -------
+    None.
+
+    """
 
     fig,ax = plt.subplots(5,figsize=(4,4))
     for i,peri in enumerate(peris):
@@ -932,6 +981,282 @@ def show_slopes_panels(ec=1e-4,
     plt.show()
 
 
+def show_perihelia_panels(ec=1e-4,
+                          incl=1e-4,
+                          retro=1e-4,
+                          beta=0,
+                          gamma=-1.3,
+                          vexp=1,
+                          loc=None,
+                          name="perihelia_model_test",
+                          days=7,
+                          peris=[1,4,6,8,10],
+                          marker_dist=[0.2,0.16,0.14,0.11,0.1],
+                          att=None,
+                          att_values=[0],
+                          overplot=None):
+    """
+    A plot of 5 panels, one for each orbital group, showing the 
+    near perihela flux of the orbits.
+
+    Parameters
+    ----------
+    ec : float, optional
+        Eccentricity. The default is 1e-4.
+    incl : float, optional
+        Inlicnation in degrees. The default is 1e-4.
+    retro : float, optional
+        Retrograde fraction of the grains. The default is 1e-4.
+    beta : float, optional
+        RAdiation pressure parameter. The default is 0.
+    gamma : float, optional
+        Number density scaling. The default is -1.3.
+    vexp : float, optional
+        The exponent on speed. The default is 1.
+    loc : str, optional
+        Figures folder. The default is None.
+    name : str, optional
+        File name. The default is "perihelia_model_test".
+    days : int, optional
+        How many days to compute and show. The default is 7.
+    peris : list of int, optional
+        The orbits to show. The default is [1,4,6,8,10].
+    marker_dist : list of float, optional
+        Where in AU to place vlines. 
+        The default is [0.2,0.16,0.14,0.11,0.1].
+    att : str, optional
+        The name of the attribute to vary. The default is None.
+    att_values : list of float, optional
+        The values of att to compare. The default is [0].
+    overplot : list of float, optional
+        The list of parameters: [ec, incl, retro, beto, gamma, vexp]. 
+        The default is None.
+
+
+    Raises
+    ------
+    Exception
+        DESCRIPTION.
+
+    Returns
+    -------
+    None.
+
+    """
+
+    fig,ax = plt.subplots(5,figsize=(4,4))
+    for i,peri in enumerate(peris):
+        enc = encounter_group(peri)
+        data = construct_perihel_n(peri,days=days,step_hours=4)
+        r_vector = data["r_sc"].to_numpy()
+        hours_vector = (data["jd"].to_numpy()
+                        - construct_perihel_n(peri,0)["jd"][0])*24
+        v_r_vector = data["v_sc_r"].to_numpy()
+        v_phi_vector = (data["v_sc_t"].to_numpy())
+        S_front_vector = data["area_front"].to_numpy()
+        S_side_vector = data["area_side"].to_numpy()
+        midvals = []
+        if att is None:
+            att_values = [0]
+        lines=["-k",":k","--k","-grey",":grey","--grey"]
+        for j,value in enumerate(att_values):
+            if att == "ec":
+                ec = value
+                legend_label = lambda v: r"$e=\,$"+f"{np.around(v,2)}"
+            elif att == "incl":
+                incl = value
+                legend_label = lambda v: r"$\theta=\,$"+f"{np.around(v,2)}"
+            elif att == "retro":
+                retro = value
+                legend_label = lambda v: r"$rp=\,$"+f"{np.around(v,2)}"
+            elif att == "beta":
+                beta = value
+                legend_label = lambda v: r"$\beta=\,$"+f"{v}"
+            elif att == "gamma":
+                gamma = value
+                legend_label = lambda v: r"$\gamma=\,$"+f"{v}"
+            elif att == "vexp":
+                vexp = value
+                legend_label = lambda v: r"$\epsilon=\,$"+f"{v}"
+            elif att is None:
+                pass
+                legend_label = lambda v: None
+            else:
+                raise Exception(
+                    'bad att, allowed: ["ec","inlc","retro","beta",'
+                    +'"gamma","vexp",None]')
+
+            flux = bound_flux_vectorized(
+                r_vector = r_vector,
+                v_r_vector = v_r_vector,
+                v_phi_vector = v_phi_vector,
+                S_front_vector = S_front_vector,
+                S_side_vector = S_side_vector,
+                ex = ec,
+                incl = incl,
+                retro = retro,
+                beta = beta,
+                gamma = gamma,
+                velocity_exponent = vexp,
+                n = 7e-9)
+
+            ax[i].plot(hours_vector,flux/np.max(flux),lines[j],
+                       label=legend_label(value))
+
+        if overplot is not None:
+            flux = bound_flux_vectorized(
+                r_vector = r_vector,
+                v_r_vector = v_r_vector,
+                v_phi_vector = v_phi_vector,
+                S_front_vector = S_front_vector,
+                S_side_vector = S_side_vector,
+                ex = overplot[0],
+                incl = overplot[1],
+                retro = overplot[2],
+                beta = overplot[3],
+                gamma = overplot[4],
+                velocity_exponent = overplot[5],
+                n = 7e-9)
+            ax[i].plot(hours_vector,flux/np.max(flux),"--k")
+
+        ax[i].set_xlim(-days*24,days*24)
+        hour_threshold = np.abs(hours_vector[
+            np.argmin(np.abs(r_vector-marker_dist[i]))])
+        ax[i].set_ylabel(f"Group {enc}")
+        ax[i].yaxis.set_major_locator(MaxNLocator(nbins=4,integer=True))
+        if i!=4:
+            ax[i].xaxis.set_ticklabels([])
+        toplim = 1.25*ax[i].get_ylim()[1]
+        ax[i].vlines([hour_threshold,-hour_threshold],0,toplim,
+                     ls="dashed",color="k")
+        ax[i].text(hour_threshold+25, (0.85-0.6*(i<2))*toplim,
+                   f"${marker_dist[i]} \, AU$",
+                   horizontalalignment='left',
+                   verticalalignment='top')
+        ax[i].set_ylim(bottom=0,top=toplim)
+        ax[i].yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+
+    if att is not None:
+        ax[0].legend(loc=2,ncol=1,fontsize="small",frameon=True,edgecolor="w")
+    #ax[0].set_title("All the fluxes, "
+    #                +f"compensated by $R^{{{compensation}}}$")
+    ax[4].set_xlabel("Time since perihelia [h]")
+    ax[2].set_ylabel("Flux [$C \cdot s^{{-1}}$] \n"+
+                     "Group 3",linespacing=2)
+    fig.tight_layout()
+    fig.subplots_adjust(hspace=0.1)
+    if loc is not None:
+        plt.savefig(loc+name+".pdf",format="pdf")
+    plt.show()
+
+
+def estimate_slope(ec=1e-4,
+                   incl=1e-4,
+                   retro=1e-4,
+                   beta=0,
+                   gamma=-1.3,
+                   vexp=1,
+                   peris=[4,6,8,10],
+                   r1=0.25,
+                   r2=0.4):
+    """
+    Estimates the slope, given the parameters. Be careful, this assumes 
+    that the profile is power-law, which it almost never is.
+
+    Parameters
+    ----------
+    ec : float, optional
+        Eccentricity. The default is 1e-4.
+    incl : float, optional
+        Inlicnation in degrees. The default is 1e-4.
+    retro : float, optional
+        Retrograde fraction of the grains. The default is 1e-4.
+    beta : float, optional
+        RAdiation pressure parameter. The default is 0.
+    gamma : float, optional
+        Number density scaling. The default is -1.3.
+    vexp : float, optional
+        The exponent on speed. The default is 1.
+    peris : list of int, optional
+        The perihelia to investigate. The default is [4,6,8,10].
+    r1 : float, optional
+        The fisrt reference AU. The default is 0.25.
+    r2 : float, optional
+        The second reference AU. The default is 0.4.
+
+    Returns
+    -------
+    float
+        The implied slope.
+
+    """
+    slopes = np.zeros(len(peris))
+    for i,peri in enumerate(peris):
+        data = construct_perihel_n(peri,days=13,step_hours=8,
+                                   outbound_only=True)
+        r_vector = data["r_sc"].to_numpy()
+        v_r_vector = data["v_sc_r"].to_numpy()
+        v_phi_vector = (data["v_sc_t"].to_numpy())
+        S_front_vector = data["area_front"].to_numpy()
+        S_side_vector = data["area_side"].to_numpy()
+
+        flux = bound_flux_vectorized(
+            r_vector = r_vector,
+            v_r_vector = v_r_vector,
+            v_phi_vector = v_phi_vector,
+            S_front_vector = S_front_vector,
+            S_side_vector = S_side_vector,
+            ex = ec,
+            incl = incl,
+            retro = retro,
+            beta = beta,
+            gamma = gamma,
+            velocity_exponent = vexp,
+            n = 7e-9)
+    
+        i1 = np.argmin(np.abs(r_vector-r1))
+        i2 = np.argmin(np.abs(r_vector-r2))
+        slopes[i] = np.log(flux[i1]/flux[i2])/np.log(r_vector[i1]/r_vector[i2])
+    return np.mean(slopes)
+
+
+def heatmap(x, y, values,
+            xlabel="xlabel",
+            ylabel="ylabel",
+            cmap="Greys"):
+    fig, ax = plt.subplots()
+    im = ax.imshow(np.flip(values,axis=1).transpose(),
+                   extent=(min(x),max(x),
+                           min(y),max(y)),
+                   aspect='auto',
+                   cmap=cmap)
+    cbar = fig.colorbar(im)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    fig.show()
+
+
+def show_slope_map(vexps=np.linspace(1.7,2.6,24),
+                   gammas=np.linspace(-2,-1.3,24)):
+    slopes = np.zeros((len(vexps),len(gammas)))
+    with tqdm(total=len(vexps)*len(gammas)) as pbar:
+        for i,vexp in enumerate(vexps):
+            for j,gamma in enumerate(gammas):
+                slopes[i,j] = estimate_slope(vexp=vexp,gamma=gamma)
+                pbar.update(1)
+
+    heatmap(vexps,gammas,np.abs(slopes+2.5),
+            xlabel=r"$\epsilon$",
+            ylabel=r"$\gamma$")
+
+    heatmap(gammas,vexps,np.abs(slopes.transpose()+2.5),
+            xlabel=r"$\gamma$",
+            ylabel=r"$\epsilon$")
+
+    return slopes
+
+
+
 
 
 #%%
@@ -993,7 +1318,62 @@ if __name__ == "__main__":
                        loc=loc,
                        name="compensated_viable_model")
 
+    #Another viable option
+    show_slopes_panels(overplot=[0.1,10,0.03,0.05,-1.8,2],
+                       loc=loc,
+                       name="compensated_viable_model")
 
+
+
+
+#%%
+if __name__ == "__main__":
+
+    loc = os.path.join(figures_location,"perihelia","ddz_profile","")
+
+    #The vanilla case
+    show_perihelia_panels(loc=loc,
+                          name="perihelia_model_vanilla")
+
+    #Different speed exponents
+    show_perihelia_panels(att="vexp",att_values=[1,2,3],
+                       loc=loc,
+                       name="perihelia_model_vexp")
+
+    #Different spatial scaling
+    show_perihelia_panels(att="gamma",att_values=[-1.3,-2,-3],
+                       loc=loc,
+                       name="perihelia_model_gamma")
+    
+    #Different beta
+    show_perihelia_panels(att="beta",att_values=[0,0.25,0.5],
+                       loc=loc,
+                       name="perihelia_model_beta")
+    
+    #Different eccentricity
+    show_perihelia_panels(att="ec",att_values=[1e-4,0.25,0.5],
+                       loc=loc,
+                       name="perihelia_model_ec")
+
+    #Different inclination
+    show_perihelia_panels(att="incl",att_values=[1e-4,15,45],
+                       loc=loc,
+                       name="perihelia_model_incl")
+    
+    #Different retrograde
+    show_perihelia_panels(att="retro",att_values=[1e-4,0.02,0.1],
+                       loc=loc,
+                       name="perihelia_model_retro")
+
+    #The original viable option
+    show_perihelia_panels(overplot=[0.3,25,0.05,0.25,-1.8,2],
+                       loc=loc,
+                       name="perihelia_viable_model")
+
+    #Another viable option
+    show_perihelia_panels(overplot=[0.1,10,0.03,0.05,-1.8,2],
+                       loc=loc,
+                       name="perihelia_viable_model")
 
 
 #%%
