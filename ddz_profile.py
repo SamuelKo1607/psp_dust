@@ -4,6 +4,7 @@ import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.cm as cm
+from matplotlib.ticker import FormatStrFormatter
 import datetime as dt
 import functools
 from numba import jit
@@ -793,6 +794,7 @@ def estimate_powerlaws_all(obs,
 
 def maxima_plot(obs,
                 days=7,
+                marker_dist=[0.2,0.16,0.14,0.11,0.1],
                 loc=None):
 
     obs = [ob for ob in obs if (ob.duty_hours > 0.1
@@ -805,23 +807,26 @@ def maxima_plot(obs,
 
     fig,ax = plt.subplots(5,figsize=(4,4))
 
+
+
     for i,gr in enumerate(set(encounter_groups)):
         for j,enc in enumerate(set(encounters[encounter_groups==gr])):
-
-
-
-            #TBD find the minimum more nicely, using interp
 
             r = np.array([ob.heliocentric_distance for ob in obs
                           if (ob.encounter == enc)])
             jd = np.array([ob.jd_center for ob in obs
                           if (ob.encounter == enc)])
 
-            r_interp =
-
+            r_interp = CubicSpline(jd, r)
             index_peri = np.argmin(r)
-            peri_jd = jd[index_peri]
+            jd_fine = np.linspace(jd[index_peri-2],jd[index_peri+2],100)
+            r_fine = r_interp(jd_fine)
+            peri_jd = jd_fine[r_fine==np.min(r_fine)][0]
             compensated_hours = (jd - peri_jd)*24
+
+            #mark ---- AU crossing
+            jd_threshold = np.abs(jd[np.argmin(np.abs(r-marker_dist[i]))]
+                            - peri_jd)*24
 
             flux_obs = np.array([ob.count_corrected
                                  /ob.duty_hours for ob in obs
@@ -831,12 +836,20 @@ def maxima_plot(obs,
 
         ax[i].set_xlim(-days*24,days*24)
         ax[i].set_ylabel(f"Group {gr}")
+        ax[i].yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
+        toplim = 1.1*ax[i].get_ylim()[1]
+        ax[i].vlines([jd_threshold,-jd_threshold],0,toplim,
+                     ls="dashed",color="k")
+        ax[i].text(jd_threshold+15, 0.85*toplim,
+                   f"${marker_dist[i]} \, AU$",
+                   horizontalalignment='left',
+                   verticalalignment='top')
         if i!=4:
             ax[i].xaxis.set_ticklabels([])
-        ax[i].set_ylim(bottom=0)
+        ax[i].set_ylim(bottom=0,top=toplim)
 
     ax[4].set_xlabel("Time since perihelia [h]")
-    ax[2].set_ylabel("ylabel "+"[$unit$]"+" \n"+
+    ax[2].set_ylabel("Flux "+"[$s^{-1}$]"+" \n"+
                      "Group 3",linespacing=2)
     fig.tight_layout()
     fig.subplots_adjust(hspace=0.1)
