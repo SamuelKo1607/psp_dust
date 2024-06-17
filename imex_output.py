@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import matplotlib as mpl
+import matplotlib.dates as mdates
 import datetime as dt
 from conversions import jd2date
 from conversions import date2jd
@@ -57,6 +58,7 @@ def load_so_summary(file):
     df['mass6_kg'] = 3.16e-4
     df['mass7_kg'] = 1e-2
     df['ephemjd']  = df['ephemepoch']/(3600*24)+2451544.5000000
+    df['flux_tot_/m2d'] = sum([df[f'flux{i}_/m2d'] for i in range(8)])
     return df
 
 
@@ -64,8 +66,8 @@ def load_so_summary(file):
 if __name__ == "__main__":
 
     f_hel_r, *rest = fetch_heliocentric(psp_ephemeris_file,cache_psp=False)
-    orbelts_file = os.path.join("data_synced","sp_orbelts_mass.txt")
-    so_summary_file = os.path.join("data_synced","sp_summaryall.txt")
+    orbelts_file = os.path.join("data_synced","so_orbelts_mass.txt")
+    so_summary_file = os.path.join("data_synced","so_summaryall.txt")
 
     orbelts_df = load_orbital_elements(orbelts_file)
     so_summary_df = load_so_summary(so_summary_file)
@@ -104,14 +106,18 @@ if __name__ == "__main__":
     jd = so_summary_df["ephemjd"]
     r = f_hel_r(jd)
     date = [jd2date(j) for j in jd]
-    flux = sum([so_summary_df[f"flux{i}_/m2d"] for i in range(8)][:8])
+    flux = so_summary_df["flux_tot_/m2d"]
     ax.semilogy(date,flux,label="all")
-    flux = sum([so_summary_df[f"flux{i}_/m2d"] for i in range(8)][:1])
+    flux = so_summary_df["flux0_/m2d"]
     ax.semilogy(date,flux,label="bin0")
     ax2.plot(date,r,"k")
     ax2.set_ylim(0,1.5)
     ax.set_ylabel(r"flux [$m^{-2} s^{-1}$]")
-    ax.set_xlim(dt.datetime(2020,1,1),dt.datetime(2024,1,1))
+    ax.set_xlim(dt.datetime(2021,7,10),dt.datetime(2021,8,20))
+    ax.xaxis.set_major_locator(mdates.DayLocator(bymonthday=[10,20,30]))
+    ax.xaxis.set_minor_locator(mdates.DayLocator())
+    ax.set_xticks(ax.get_xticks(), ax.get_xticklabels(),
+                  rotation=45, ha='right')
     ax.legend()
     plt.show()
 
