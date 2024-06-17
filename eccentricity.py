@@ -1224,6 +1224,29 @@ def heatmap(x, y, values,
             xlabel="xlabel",
             ylabel="ylabel",
             cmap="Greys"):
+    """
+    General purpose usef friendly heatmap plotting wrapper.
+
+    Parameters
+    ----------
+    x : np.array 1D
+        x-axis varaible values.
+    y : np.array 1D
+        y-axis variable values.
+    values : np.array 2D
+        values to show.
+    xlabel : str, optional
+        x-axis label. The default is "xlabel".
+    ylabel : str, optional
+        y-axis label. The default is "ylabel".
+    cmap : str, optional
+        name of the pyplot colormap. The default is "Greys".
+
+    Returns
+    -------
+    None.
+
+    """
     fig, ax = plt.subplots()
     im = ax.imshow(np.flip(values,axis=1).transpose(),
                    extent=(min(x),max(x),
@@ -1237,12 +1260,13 @@ def heatmap(x, y, values,
 
 
 def show_slope_map(vexps=np.linspace(1.7,2.6,24),
-                   gammas=np.linspace(-2,-1.3,24)):
+                   gammas=np.linspace(-2,-1.3,22),
+                   **kwargs):
     slopes = np.zeros((len(vexps),len(gammas)))
     with tqdm(total=len(vexps)*len(gammas)) as pbar:
         for i,vexp in enumerate(vexps):
             for j,gamma in enumerate(gammas):
-                slopes[i,j] = estimate_slope(vexp=vexp,gamma=gamma)
+                slopes[i,j] = estimate_slope(vexp=vexp,gamma=gamma,**kwargs)
                 pbar.update(1)
 
     heatmap(vexps,gammas,np.abs(slopes+2.5),
@@ -1256,6 +1280,72 @@ def show_slope_map(vexps=np.linspace(1.7,2.6,24),
     return slopes
 
 
+def empirical_relation(gammas,vexps,
+                       results1,results2,
+                       target=-2.5,
+                       order=2,
+                       loc=os.path.join(figures_location,
+                                        "perihelia","ddz_profile",""),
+                       name="empirical_slope"):
+
+    fig, ax = plt.subplots()
+
+    for j,results in enumerate([results1,results2]):
+        badness = np.abs(results-target)
+        x_to_fit = []
+        y_to_fit = []
+        for i,ix in enumerate(gammas):
+            x_to_fit.append(ix)
+            y_to_fit.append(vexps[np.argmin(badness[:,i])])
+        fitcoeff = np.polyfit(x_to_fit,y_to_fit,order)
+        fit = np.poly1d(fitcoeff)
+        if not j:
+            ax.plot(x_to_fit,fit(x_to_fit),
+                    c="k",ls="solid",label="Base")
+        else:
+            ax.plot(x_to_fit,fit(x_to_fit),
+                    c="k",ls="dashed",label="Non-circular")
+
+    ax.set_xlabel(r"$\gamma$")
+    ax.set_ylabel(r"$\epsilon$")
+    ax.legend()
+    ax.set_xlim(min(gammas),max(gammas))
+    fig.tight_layout()
+    if loc is not None:
+        plt.savefig(loc+name+".pdf",format="pdf")
+    plt.show()
+
+
+def analyse_slopes(vexps=np.linspace(1.5,2.6,20),
+                   gammas=np.linspace(-2,-1.3,10)):
+    """
+    creates the paper plot for epsilon = f(gamma)
+
+    Parameters
+    ----------
+    vexps : np.array of float, optional
+        the vexps of interest. The default is np.linspace(1.7,2.6,16).
+    gammas : np.array of float, optional
+        the gammas of interest. The default is np.linspace(-2,-1.3,10).
+
+    Returns
+    -------
+    None.
+
+    """
+    slopes_base = show_slope_map(vexps,gammas)
+    slopes_upper = show_slope_map(vexps,gammas,
+                                  ec=0.5,
+                                  incl=45,
+                                  retro=0.1,
+                                  beta=0.5)
+    empirical_relation(gammas,vexps,slopes_base,slopes_upper)
+
+
+#%%
+if __name__ == "__main__":
+
+    analyse_slopes()
 
 
 
@@ -1319,7 +1409,7 @@ if __name__ == "__main__":
                        name="compensated_viable_model")
 
     #Another viable option
-    show_slopes_panels(overplot=[0.1,10,0.03,0.05,-1.8,2],
+    show_slopes_panels(overplot=[0.1,10,0.03,0.05,-1.9,2],
                        loc=loc,
                        name="compensated_viable_model")
 
@@ -1371,7 +1461,7 @@ if __name__ == "__main__":
                        name="perihelia_viable_model")
 
     #Another viable option
-    show_perihelia_panels(overplot=[0.1,10,0.03,0.05,-1.8,2],
+    show_perihelia_panels(overplot=[0.1,10,0.03,0.05,-1.9,2],
                        loc=loc,
                        name="perihelia_viable_model")
 
