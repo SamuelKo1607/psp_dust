@@ -446,11 +446,36 @@ def split_at_jumps(array,
     else:
         jumps = np.where(np.diff(condition_array)>step)[0]
         chunk_sizes = np.append(jumps[0]+1,np.diff(jumps))
+        last_chunk_size = len(array)-np.sum(chunk_sizes)
+        chunk_sizes = np.append(chunk_sizes,last_chunk_size)
         list_of_chunks = []
         for chunk_size in chunk_sizes:
             list_of_chunks.append(array[:chunk_size])
             array = array[chunk_size:]
         return list_of_chunks
+
+
+def join_with_nans(list_of_arrays):
+    """
+    Joins a list of 1D arrays back into a list, 
+    but with nans at the seams.
+
+    Parameters
+    ----------
+    list_of_arrays : list of 1D np.array
+        DESCRIPTION.
+
+    Returns
+    -------
+    arr : np.array
+        DESCRIPTION.
+
+    """
+    arr = list_of_arrays[0]
+    for a in list_of_arrays[1:]:
+        arr = np.append(arr,np.nan)
+        arr = np.append(arr,a)
+    return arr
 
 
 def powerlaw(c,slope,x):
@@ -749,52 +774,90 @@ def estimate_powerlaws_all(obs,
     plt.show()
 
     fig,ax = plt.subplots(5,figsize=(4,4))
-    for i,enc in enumerate(set(encounter_groups)):
+    markers = ["s","s","x","x","p","p","v","v"]
+    colors = 4*["k","darkgrey"]
+    for i,gr in enumerate(set(encounter_groups)):
+
+        #TBD differentiate by encounters
+        encs = set([ob.encounter for ob in obs
+                    if (ob.encounter_group == gr)
+                    and (ob.heliocentric_distance < 0.5)
+                    and (ob.heliocentric_distance > 0.15)])
+
+        for j,enc in enumerate(encs):
+            r = np.array([ob.heliocentric_distance for ob in obs
+                          if (ob.encounter == enc)
+                          and (ob.heliocentric_distance < 0.5)
+                          and (ob.heliocentric_distance > 0.15)])
+            flux_obs = np.array([ob.count_corrected
+                                 /ob.duty_hours for ob in obs
+                                 if (ob.encounter == enc)
+                                 and (ob.heliocentric_distance < 0.5)
+                                 and (ob.heliocentric_distance > 0.15)])/3600
+            ax[i].scatter(r,flux_obs/(r**compensation)*10**4,
+                        c=colors[j],label=f"{enc}",s=5,marker=markers[j],
+                        zorder=100)
+
         r = np.array([ob.heliocentric_distance for ob in obs
-                      if (ob.encounter_group == enc)
+                      if (ob.encounter_group == gr)
                       and (ob.heliocentric_distance < 0.5)
                       and (ob.heliocentric_distance > 0.15)])
         flux_obs = np.array([ob.count_corrected
                              /ob.duty_hours for ob in obs
-                             if (ob.encounter_group == enc)
+                             if (ob.encounter_group == gr)
                              and (ob.heliocentric_distance < 0.5)
                              and (ob.heliocentric_distance > 0.15)])/3600
-        ax[i].scatter(r,flux_obs/(r**compensation)*10**4,
-                    c="k",label=f"{enc}",s=2)
+
         ax[i].set_xlim(0.15,0.5)
-        fit = np.poly1d(np.polyfit(r, flux_obs/(r**compensation)*10**4, 1))
-        midval = fit((min(r)+max(r))/2)
-        ax[i].plot([min(r),max(r)],[fit(min(r)),fit(max(r))],
+        fake_r = np.linspace(0.15,0.5,20)
+        #fit = np.poly1d(np.polyfit(r, flux_obs/(r**compensation)*10**4, 1))
+        #midval = fit((min(r)+max(r))/2)
+        #ax[i].plot([min(r),max(r)],[fit(min(r)),fit(max(r))],
+        #           c="k")
+        mean_r = 0.325#(min(r)+max(r))/2
+        coeffs = np.polyfit(np.log(r), np.log(flux_obs), 1)
+        logfit = np.poly1d(coeffs)
+        midval = np.exp(logfit(np.log(mean_r)))/(
+            mean_r**compensation)*10**4
+        ax[i].plot(fake_r,
+                   np.exp(logfit(np.log(fake_r)))/(fake_r**compensation)*10**4,
                    c="k")
+        ax[i].add_patch(mpl.patches.Rectangle((0.155, 3.6),
+                                              0.04, 1,
+                                              fc = 'white',
+                                              linewidth = 0, zorder = 49))
+        ax[i].text(0.175, 4.1, f"{np.around(coeffs[0],2)}",
+                   va = "center", ha = "center", zorder = 50)
         for slope in [-dslope,dslope]:
-            fit = np.poly1d(np.polyfit(r, flux_obs/
-                                       (r**(compensation+slope))*10**4, 1))
-            ax[i].plot([min(r),max(r)],
-                       (np.array([fit(min(r)),fit(max(r))])
-                        /fit((min(r)+max(r))/2)*midval),
-                       c="k",ls="dashed")
-        ax[i].set_ylabel(f"Group {enc}")
-        ax[i].yaxis.set_ticks(np.array([2,4]))
+            new_slope = coeffs[0]+slope
+            new_logfit = lambda x : x**(new_slope-compensation)
+            new_midval = new_logfit(mean_r)
+            prefactor = midval / new_midval
+            #fit = np.poly1d(np.polyfit(r, flux_obs/
+            #                           (r**(compensation+slope))*10**4, 1))
+            ax[i].plot(fake_r,(prefactor * np.array(new_logfit(fake_r))),
+                                c="k",ls="dashed")
+        ax[i].set_ylabel(f"Group {gr}")
+        ax[i].yaxis.set_ticks(np.array([0,2,4]))
         ax[i].grid(color='lightgrey', linestyle='-',
                    linewidth=1, axis="y", which = "both", alpha=0.5)
         if i!=4:
             ax[i].xaxis.set_ticklabels([])
         ax[i].set_ylim(bottom=0,top=5)
-    #ax[0].set_title("All the fluxes, "
-    #                +f"compensated by $R^{{{compensation}\pm{dslope}}}$")
     ax[4].set_xlabel("R [AU]")
     ax[2].set_ylabel(f"Flux [$10^{{-4}} s^{{-1}} AU^{{{-compensation}}}$] \n"+
                      "Group 3",linespacing=2)
     fig.tight_layout()
     fig.subplots_adjust(hspace=0.1)
     if loc is not None:
-        plt.savefig(loc+f"compensated_flux.pdf",format="pdf")
+        plt.savefig(loc+"compensated_flux.pdf",format="pdf")
     plt.show()
 
 
 def maxima_plot(obs,
                 days=7,
                 marker_dist=[0.2,0.16,0.14,0.11,0.1],
+                marker_time=[74,50.4,48.2,33.1,30.5],
                 loc=None):
 
     obs = [ob for ob in obs if (ob.duty_hours > 0.1
@@ -828,6 +891,8 @@ def maxima_plot(obs,
             jd_threshold = np.abs(jd[np.argmin(np.abs(r-marker_dist[i]))]
                             - peri_jd)*24
 
+            print(jd_threshold)
+
             flux_obs = np.array([ob.count_corrected
                                  /ob.duty_hours for ob in obs
                                  if (ob.encounter == enc)])/3600
@@ -838,9 +903,9 @@ def maxima_plot(obs,
         ax[i].set_ylabel(f"Group {gr}")
         ax[i].yaxis.set_major_formatter(FormatStrFormatter('%.3f'))
         toplim = 1.1*ax[i].get_ylim()[1]
-        ax[i].vlines([jd_threshold,-jd_threshold],0,toplim,
+        ax[i].vlines([marker_time[i],-marker_time[i]],0,toplim,
                      ls="dashed",color="k")
-        ax[i].text(jd_threshold+15, 0.85*toplim,
+        ax[i].text(marker_time[i]+15, 0.85*toplim,
                    f"${marker_dist[i]} \, AU$",
                    horizontalalignment='left',
                    verticalalignment='top')
